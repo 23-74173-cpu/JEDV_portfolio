@@ -592,8 +592,6 @@ function App() {
           </div>
         </section>
 
-        <GitHubActivity />
-
         <section className="paper-section stack-section" id="skills" aria-labelledby="skills-title">
           <div className="container">
             <div className="section-heading-row">
@@ -606,6 +604,8 @@ function App() {
             <div className="skills-grid">{skillGroups.map((group) => <SkillGroup key={group.label} label={group.label} items={group.items} />)}</div>
           </div>
         </section>
+
+        <GitHubActivity />
 
         <section ref={projectsSectionRef} className="ink-section projects-section" id="projects" aria-labelledby="projects-title">
             <div ref={projectsFrameRef} className="container projects-pin-frame">
