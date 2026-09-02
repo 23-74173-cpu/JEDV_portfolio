@@ -117,25 +117,29 @@ h1 em, h2 em { color: var(--orange); font-family: var(--display); font-weight: 4
 .marquee-toggle span { margin-left: 8px; }.marquee-viewport { overflow: hidden; border-top: 1px solid color-mix(in srgb, var(--ink) 25%, transparent); }.marquee-track { display: flex; width: max-content; animation: marquee 80s linear infinite; }.marquee-viewport:hover .marquee-track, .marquee-viewport:focus-within .marquee-track, .marquee-viewport.is-paused .marquee-track { animation-play-state: paused; }.tech-item { display: inline-flex; align-items: center; gap: 12px; padding: 14px 19px; border-right: 1px solid color-mix(in srgb, var(--ink) 20%, transparent); font-family: var(--mono); font-size: .78rem; white-space: nowrap; }.tech-mark { color: var(--orange); font-size: 1rem; }
 @keyframes marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
 
-.github-section { padding: 96px 0 100px; background: var(--ink); color: var(--paper); border-top: 1px solid color-mix(in srgb, var(--paper) 14%, transparent); border-bottom: 1px solid color-mix(in srgb, var(--paper) 14%, transparent); }
-.github-section .section-label { color: var(--muted-ink); }
-.github-section .section-subheading { color: var(--muted-ink); }
-.github-section h2 em { color: var(--orange); }
-.github-grid-wrap { margin-top: 10px; }
-.github-chart-frame { position: relative; border: 1px solid color-mix(in srgb, var(--paper) 18%, transparent); background: color-mix(in srgb, var(--paper) 4%, transparent); padding: 14px 14px 10px; }
-.github-chart-frame::before, .github-chart-frame::after { position: absolute; content: ""; width: 11px; height: 11px; border-color: var(--orange); pointer-events: none; }
+.github-section { padding: 80px 0 48px; background: var(--paper); color: var(--text-paper); border: none; }
+.github-section .section-label { color: var(--muted-paper); }
+.github-section .section-subheading { color: var(--muted-paper); }
+.github-section h2 { color: var(--text-paper); }
+.github-section h2 em { color: #c84e21; }
+.github-grid-wrap { margin-top: 18px; }
+.github-chart-frame { position: relative; border: 1px solid var(--paper-line); background: #ffffff; padding: 14px 14px 10px; box-shadow: 0 2px 12px rgba(0,0,0,0.06); }
+.github-chart-frame::before, .github-chart-frame::after { position: absolute; content: ""; width: 11px; height: 11px; border-color: var(--orange); pointer-events: none; opacity: 0.9; }
 .github-chart-frame::before { top: -1px; left: -1px; border-top: 2px solid; border-left: 2px solid; }
 .github-chart-frame::after { right: -1px; bottom: -1px; border-right: 2px solid; border-bottom: 2px solid; }
-.github-chart-header { display: flex; align-items: center; gap: 12px; padding: 8px 0 12px; border-bottom: 1px solid color-mix(in srgb, var(--paper) 12%, transparent); font-family: var(--mono); font-size: 0.64rem; color: var(--muted-ink); letter-spacing: 0.06em; text-transform: uppercase; }
-.github-chart-header a { margin-left: auto; color: var(--orange); text-decoration: none; font-size: 0.62rem; }
-.github-chart-header a:hover { text-decoration: underline; }
+.github-chart-header { display: flex; align-items: center; gap: 12px; padding: 8px 0 12px; border-bottom: 1px solid var(--paper-line); font-family: var(--mono); font-size: 0.64rem; color: var(--muted-paper); letter-spacing: 0.06em; text-transform: uppercase; }
+.github-chart-header a { margin-left: auto; color: #b64a1f; text-decoration: none; font-size: 0.62rem; font-weight: 600; }
+.github-chart-header a:hover { color: #c84e21; text-decoration: underline; }
 .github-chart-link { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; padding: 14px 0 6px; scrollbar-width: thin; scrollbar-color: var(--orange) transparent; }
-.github-chart-img { display: block; width: 100%; min-width: 720px; max-width: none; height: auto; image-rendering: crisp-edges; }
-.github-meta { display: flex; align-items: center; gap: 10px; padding-top: 10px; font-family: var(--mono); font-size: 0.60rem; color: var(--muted-ink); letter-spacing: 0.04em; text-transform: uppercase; }
+.github-chart-img { display: block; width: 100%; min-width: 720px; max-width: none; height: auto; image-rendering: crisp-edges; background: #ffffff; }
+.github-meta { display: flex; align-items: center; gap: 10px; padding-top: 10px; font-family: var(--mono); font-size: 0.60rem; color: var(--muted-paper); letter-spacing: 0.04em; text-transform: uppercase; }
 .github-meta-dot { width: 4px; height: 4px; background: var(--lime); border-radius: 50%; box-shadow: 0 0 0 4px color-mix(in srgb, var(--lime) 14%, transparent); flex: 0 0 auto; }
 @media (max-width: 700px) { .github-chart-img { min-width: 640px; } .github-chart-header { font-size: 0.58rem; } }
 
-.paper-section { color: var(--text-paper); background: var(--paper); }.about-section { padding: 112px 0 125px; }.section-label { display: flex; align-items: center; gap: 9px; margin-bottom: 25px; color: var(--muted-paper); font-size: .74rem; }.label-dot { width: 7px; height: 7px; background: var(--orange); }.section-heading-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 28px; margin-bottom: 60px; }.section-heading-row h2 { margin-bottom: 0; font-size: clamp(3.5rem, 7.2vw, 6.7rem); line-height: .86; }.section-heading-row h2 em { color: var(--text-paper); }.section-subheading { max-width: 260px; margin-bottom: 0; color: var(--muted-paper); font-family: var(--mono); font-size: .82rem; line-height: 1.60; text-transform: uppercase; letter-spacing: .07em; text-align: right; }
+.paper-section { color: var(--text-paper); background: var(--paper); }
+.stack-section { padding: 48px 0 112px; background: var(--paper); border-top: none; }
+.stack-section .section-heading-row { margin-bottom: 48px; }
+.about-section { padding: 112px 0 125px; }.section-label { display: flex; align-items: center; gap: 9px; margin-bottom: 25px; color: var(--muted-paper); font-size: .74rem; }.label-dot { width: 7px; height: 7px; background: var(--orange); }.section-heading-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 28px; margin-bottom: 60px; }.section-heading-row h2 { margin-bottom: 0; font-size: clamp(3.5rem, 7.2vw, 6.7rem); line-height: .86; }.section-heading-row h2 em { color: var(--text-paper); }.section-subheading { max-width: 260px; margin-bottom: 0; color: var(--muted-paper); font-family: var(--mono); font-size: .82rem; line-height: 1.60; text-transform: uppercase; letter-spacing: .07em; text-align: right; }
 .heading-side { display: flex; flex-direction: column; align-items: flex-end; gap: 10px; text-align: right; flex-shrink: 0; max-width: 280px; }
 .heading-side .section-label { margin-bottom: 0; }
 .heading-side .section-subheading { margin-bottom: 0; }
