@@ -1,7 +1,11 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import type { KeyboardEvent as ReactKeyboardEvent, ReactNode, RefObject } from 'react';
+import gsap from 'gsap';
+import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { certifications, email, projects, skillGroups, technologies, timeline, type Project, type ProjectStatus } from './data';
 import { resumeText } from './resume';
+
+gsap.registerPlugin(ScrollTrigger);
 
 type Theme = 'dark' | 'light';
 type HeaderTone = 'dark' | 'light';
@@ -17,15 +21,23 @@ const navItems = [
 ];
 
 const filters: Array<'All' | ProjectStatus> = ['All', 'Shipped', 'In Progress', 'Active'];
-const DESKTOP_SCROLL_LOCK_QUERY = '(min-width: 901px) and (prefers-reduced-motion: no-preference)';
 const LIGHT_HEADER_SECTIONS = new Set(['about', 'experience', 'contact']);
-
-function isDesktopScrollLockEnabled() {
-  return typeof window !== 'undefined' && window.matchMedia(DESKTOP_SCROLL_LOCK_QUERY).matches;
-}
 
 function ArrowUpRight() {
   return <span aria-hidden="true" className="arrow-icon">↗</span>;
+}
+
+function SocialIcon({ network }: { network: 'github' | 'facebook' | 'linkedin' }) {
+  const paths = {
+    github: 'M12 2.5a9.5 9.5 0 0 0-3 18.51c.48.09.66-.21.66-.46v-1.67c-2.68.58-3.25-1.13-3.25-1.13-.44-1.11-1.08-1.41-1.08-1.41-.88-.6.07-.59.07-.59.97.07 1.48 1 1.48 1 .86 1.48 2.25 1.05 2.8.8.09-.62.34-1.05.61-1.29-2.14-.24-4.39-1.07-4.39-4.77 0-1.05.37-1.9 1-2.57-.1-.24-.43-1.22.1-2.54 0 0 .82-.26 2.61.98a9.08 9.08 0 0 1 4.74 0c1.79-1.24 2.61-.98 2.61-.98.53 1.32.2 2.3.1 2.54.63.67 1 1.52 1 2.57 0 3.71-2.26 4.52-4.41 4.76.35.3.65.9.65 1.82v2.48c0 .25.17.55.66.46A9.5 9.5 0 0 0 12 2.5Z',
+    facebook: 'M13.5 21v-8h2.75l.41-3h-3.16V8.08c0-.87.24-1.46 1.5-1.46h1.81V3.94c-.31-.04-1.38-.14-2.61-.14-2.58 0-4.35 1.58-4.35 4.48V10H7.08v3h2.77v8h3.65Z',
+    linkedin: 'M5.1 7.24a2.12 2.12 0 1 0 0-4.24 2.12 2.12 0 0 0 0 4.24ZM3.3 20.99h3.6V9.25H3.3v11.74ZM9.17 9.25h3.45v1.6h.05c.48-.92 1.66-1.89 3.42-1.89 3.66 0 4.34 2.41 4.34 5.55v6.48h-3.6v-5.75c0-1.37-.03-3.13-1.91-3.13-1.91 0-2.2 1.49-2.2 3.02v5.86H9.17V9.25Z',
+  };
+  return <svg className="social-icon" viewBox="0 0 24 24" aria-hidden="true"><path d={paths[network]} /></svg>;
+}
+
+function FigmaIcon() {
+  return <svg className="figma-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="#f24e1e" d="M7 2h5v6H7a3 3 0 1 1 0-6Z" /><path fill="#ff7262" d="M12 2h3a3 3 0 1 1 0 6h-3V2Z" /><path fill="#a259ff" d="M7 8h5v6H7a3 3 0 1 1 0-6Z" /><path fill="#1abcfe" d="M12 8h3a3 3 0 1 1 0 6h-3V8Z" /><path fill="#0acf83" d="M7 14h5v3a3 3 0 1 1-5-3Z" /></svg>;
 }
 
 function SectionLabel({ children }: { children: ReactNode }) {
@@ -49,15 +61,17 @@ function App() {
   const [marqueePaused, setMarqueePaused] = useState(false);
   const [resumeState, setResumeState] = useState<'idle' | 'preparing' | 'saved'>('idle');
   const [reducedMotion, setReducedMotion] = useState(false);
+  const [booting, setBooting] = useState(true);
+  const [typedRole, setTypedRole] = useState('');
   const [inspectionProject, setInspectionProject] = useState<Project | null>(null);
-  const [scrollLockEnabled, setScrollLockEnabled] = useState(isDesktopScrollLockEnabled);
-  const [revealedProjectCount, setRevealedProjectCount] = useState(() => isDesktopScrollLockEnabled() ? 1 : projects.length);
   const paletteInputRef = useRef<HTMLInputElement>(null);
   const projectsSectionRef = useRef<HTMLElement>(null);
+  const projectsFrameRef = useRef<HTMLDivElement>(null);
+  const projectsStageRef = useRef<HTMLDivElement>(null);
+  const projectListRef = useRef<HTMLDivElement>(null);
   const timelineSectionRef = useRef<HTMLElement>(null);
+  const timelineViewportRef = useRef<HTMLDivElement>(null);
   const timelineTrackRef = useRef<HTMLDivElement>(null);
-  const touchLastY = useRef<number | null>(null);
-  const lastProjectReveal = useRef(0);
   const toastId = useRef(0);
   const visibleProjects = projects.filter((project) => filter === 'All' || project.status === filter);
 
@@ -117,7 +131,6 @@ function App() {
   };
 
   const openProject = (project: Project) => {
-    setRevealedProjectCount(projects.length);
     setExpandedProjects((current) => current.includes(project.id) ? current : [...current, project.id]);
     scrollToSection('projects', 'Projects', false);
     window.setTimeout(() => document.getElementById(project.id)?.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth', block: 'center' }), 80);
@@ -143,20 +156,25 @@ function App() {
   }, []);
 
   useEffect(() => {
-    const mediaQuery = window.matchMedia(DESKTOP_SCROLL_LOCK_QUERY);
-    const updateScrollLock = () => {
-      const enabled = mediaQuery.matches;
-      setScrollLockEnabled(enabled);
-      setRevealedProjectCount(enabled ? 1 : projects.length);
-    };
-    updateScrollLock();
-    mediaQuery.addEventListener('change', updateScrollLock);
-    return () => mediaQuery.removeEventListener('change', updateScrollLock);
-  }, []);
+    const timeout = window.setTimeout(() => setBooting(false), reducedMotion ? 700 : 1250);
+    return () => window.clearTimeout(timeout);
+  }, [reducedMotion]);
 
-  useLayoutEffect(() => {
-    if (timelineTrackRef.current) timelineTrackRef.current.scrollLeft = 0;
-  }, []);
+  useEffect(() => {
+    const role = 'Full-stack Developer';
+    if (reducedMotion) {
+      setTypedRole(role);
+      return undefined;
+    }
+    setTypedRole('');
+    let index = 0;
+    const interval = window.setInterval(() => {
+      index += 1;
+      setTypedRole(role.slice(0, index));
+      if (index === role.length) window.clearInterval(interval);
+    }, 68);
+    return () => window.clearInterval(interval);
+  }, [reducedMotion]);
 
   useEffect(() => {
     const updateActiveSection = () => {
@@ -197,91 +215,118 @@ function App() {
     }
   }, [paletteOpen]);
 
-  useEffect(() => {
-    if (!scrollLockEnabled) return undefined;
+  useLayoutEffect(() => {
+    const timelineViewport = timelineViewportRef.current;
+    const timelineTrack = timelineTrackRef.current;
+    if (!timelineViewport || !timelineTrack) return undefined;
 
-    const headerOffset = 74;
-    const isProjectLockZone = () => {
-      const section = projectsSectionRef.current;
-      if (!section) return false;
-      const rect = section.getBoundingClientRect();
-      return rect.top <= headerOffset && rect.bottom > headerOffset;
-    };
-    const isTimelineLockZone = () => {
-      const section = timelineSectionRef.current;
-      const track = timelineTrackRef.current;
-      if (!section || !track) return false;
-      const sectionRect = section.getBoundingClientRect();
-      const trackRect = track.getBoundingClientRect();
-      return sectionRect.top <= headerOffset && sectionRect.bottom > headerOffset && trackRect.top <= window.innerHeight && trackRect.bottom > headerOffset;
-    };
-    const revealNextProject = () => {
-      const now = performance.now();
-      if (now - lastProjectReveal.current < 110) return;
-      lastProjectReveal.current = now;
-      setRevealedProjectCount((current) => Math.min(current + 1, visibleProjects.length));
-    };
-    const moveTimeline = (delta: number) => {
-      const track = timelineTrackRef.current;
-      if (!track || !delta) return false;
-      const maximum = Math.max(track.scrollWidth - track.clientWidth, 0);
-      const nextScrollLeft = Math.max(0, Math.min(track.scrollLeft + delta, maximum));
-      if (nextScrollLeft === track.scrollLeft) return false;
-      track.scrollLeft = nextScrollLeft;
-      return true;
-    };
-    const handleWheel = (event: WheelEvent) => {
-      if (paletteOpen || inspectionProject) return;
-      if (event.deltaY > 0 && isProjectLockZone() && revealedProjectCount < visibleProjects.length) {
-        event.preventDefault();
-        revealNextProject();
-        return;
-      }
-      if (!isTimelineLockZone()) return;
-      const delta = event.deltaY || event.deltaX;
-      const track = timelineTrackRef.current;
-      if (!track || !delta) return;
-      const maximum = Math.max(track.scrollWidth - track.clientWidth, 0);
-      const movingRight = delta > 0;
-      const canMove = movingRight ? track.scrollLeft < maximum - 1 : track.scrollLeft > 0;
-      if (canMove) {
-        event.preventDefault();
-        moveTimeline(delta);
-      }
-    };
-    const handleTouchStart = (event: TouchEvent) => {
-      if (event.touches.length === 1) touchLastY.current = event.touches[0].clientY;
-    };
-    const handleTouchMove = (event: TouchEvent) => {
-      if (paletteOpen || inspectionProject || event.touches.length !== 1 || touchLastY.current === null) return;
-      const currentY = event.touches[0].clientY;
-      const delta = touchLastY.current - currentY;
-      if (delta > 0 && isProjectLockZone() && revealedProjectCount < visibleProjects.length) {
-        event.preventDefault();
-        touchLastY.current = currentY;
-        if (Math.abs(delta) >= 18) revealNextProject();
-        return;
-      }
-      if (isTimelineLockZone() && moveTimeline(delta)) {
-        event.preventDefault();
-        touchLastY.current = currentY;
-      }
-    };
-    const resetTouch = () => { touchLastY.current = null; };
+    timelineViewport.scrollLeft = 0;
+    gsap.set(timelineTrack, { x: 0 });
 
-    window.addEventListener('wheel', handleWheel, { passive: false });
-    window.addEventListener('touchstart', handleTouchStart, { passive: true });
-    window.addEventListener('touchmove', handleTouchMove, { passive: false });
-    window.addEventListener('touchend', resetTouch, { passive: true });
-    window.addEventListener('touchcancel', resetTouch, { passive: true });
+    const matchMedia = gsap.matchMedia();
+    const context = gsap.context(() => {
+        matchMedia.add('(min-width: 701px) and (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference)', () => {
+        const projectsFrame = projectsFrameRef.current;
+        const projectStage = projectsStageRef.current;
+        const projectList = projectListRef.current;
+        const timelineSection = timelineSectionRef.current;
+        if (!projectsFrame || !projectStage || !projectList || !timelineSection) return undefined;
+
+          const projectCards = gsap.utils.toArray<HTMLElement>('.project-card', projectList);
+          const projectCardContents = projectCards.map((card) => card.querySelector<HTMLElement>('.project-card-content')).filter((content): content is HTMLElement => Boolean(content));
+          if (projectCards.length > 1) {
+            const getProjectDistance = () => (projectCards.length - 1) * Math.max(projectStage.clientHeight * 1.15, 500);
+          gsap.set(projectCards, { autoAlpha: 1, x: 0, y: 0, scale: 0.94, rotation: 0, zIndex: 0 });
+          gsap.set(projectCardContents, { autoAlpha: 0 });
+          gsap.set(projectCards[0], { scale: 1, zIndex: 30 });
+          gsap.set(projectCardContents[0], { autoAlpha: 1 });
+          if (projectCards[1]) gsap.set(projectCards[1], { scale: 0.965, y: 12, zIndex: 20 });
+          if (projectCards[2]) gsap.set(projectCards[2], { scale: 0.935, y: 24, zIndex: 10 });
+          const projectTimeline = gsap.timeline({
+            scrollTrigger: {
+              trigger: projectsFrame,
+              start: 'top top',
+              end: () => `+=${getProjectDistance()}`,
+              pin: true,
+              pinSpacing: true,
+              scrub: true,
+              invalidateOnRefresh: true,
+              anticipatePin: 1,
+              refreshPriority: 2,
+              id: 'projects-reveal',
+            },
+          });
+          projectCards.slice(1).forEach((card, index) => {
+            const position = index * 1.55;
+            const currentContent = projectCardContents[index];
+            const nextContent = projectCardContents[index + 1];
+            projectTimeline
+              .to(currentContent, { autoAlpha: 0, duration: 0.45, ease: 'power2.inOut' }, position)
+              .to(projectCards[index], { x: -34, y: -16, scale: 0.93, rotation: -2.5, duration: 0.55, ease: 'power2.inOut' }, position)
+              .to(card, { x: 0, y: 0, scale: 1, rotation: 0, zIndex: 30, duration: 0.55, ease: 'power2.inOut' }, position + 0.55)
+              .to(nextContent, { autoAlpha: 1, duration: 0.45, ease: 'power2.inOut' }, position + 1.1)
+              .set(projectCards[index], { zIndex: 0 }, position + 1.1);
+            if (projectCards[index + 2]) {
+              projectTimeline.set(projectCards[index + 2], { scale: 0.965, y: 12, rotation: 0, zIndex: 20 }, position + 1.1);
+            }
+            if (projectCards[index + 3]) {
+              projectTimeline.set(projectCards[index + 3], { scale: 0.935, y: 24, rotation: 0, zIndex: 10 }, position + 1.1);
+            }
+          });
+          ScrollTrigger.refresh();
+        }
+
+        timelineViewport.scrollLeft = 0;
+        gsap.set(timelineTrack, { x: 0 });
+        const getTimelineDistance = () => Math.max(timelineTrack.scrollWidth - timelineViewport.clientWidth, 0);
+        if (getTimelineDistance() > 0) {
+          gsap.to(timelineTrack, {
+            x: () => -getTimelineDistance(),
+            ease: 'none',
+            scrollTrigger: {
+              trigger: timelineSection,
+              start: 'top top',
+              end: () => `+=${getTimelineDistance()}`,
+              pin: true,
+              pinSpacing: true,
+              scrub: true,
+              invalidateOnRefresh: true,
+              anticipatePin: 1,
+              refreshPriority: 1,
+              id: 'timeline-horizontal',
+            },
+          });
+        }
+
+        const refresh = () => ScrollTrigger.refresh();
+        window.addEventListener('resize', refresh);
+        ScrollTrigger.refresh();
+        const refreshFrame = window.requestAnimationFrame(refresh);
+        return () => {
+          window.removeEventListener('resize', refresh);
+          window.cancelAnimationFrame(refreshFrame);
+        };
+      });
+      matchMedia.add('(prefers-reduced-motion: no-preference)', () => {
+        const revealTargets = gsap.utils.toArray<HTMLElement>('.section-scroll-reveal');
+        if (!revealTargets.length) return undefined;
+        gsap.set(revealTargets, { autoAlpha: 0, y: 20 });
+        ScrollTrigger.batch(revealTargets, {
+          start: 'top 88%',
+          onEnter: (elements) => gsap.to(elements, { autoAlpha: 1, y: 0, duration: 0.55, stagger: 0.08, ease: 'power2.out', overwrite: 'auto' }),
+          onEnterBack: (elements) => gsap.to(elements, { autoAlpha: 1, y: 0, duration: 0.35, stagger: 0.06, ease: 'power2.out', overwrite: 'auto' }),
+        });
+      });
+      ScrollTrigger.refresh();
+    });
+
     return () => {
-      window.removeEventListener('wheel', handleWheel);
-      window.removeEventListener('touchstart', handleTouchStart);
-      window.removeEventListener('touchmove', handleTouchMove);
-      window.removeEventListener('touchend', resetTouch);
-      window.removeEventListener('touchcancel', resetTouch);
+      matchMedia.revert();
+      context.revert();
+      timelineViewport.scrollLeft = 0;
+      gsap.set(timelineTrack, { clearProps: 'transform' });
     };
-  }, [inspectionProject, paletteOpen, revealedProjectCount, scrollLockEnabled, visibleProjects.length]);
+  }, [filter]);
 
   const commands: PaletteCommand[] = [
     ...navItems.map((item) => ({ id: `jump-${item.id}`, label: item.label, group: 'Jump to', hint: `/${item.id}`, action: () => scrollToSection(item.id, item.label) })),
@@ -313,6 +358,7 @@ function App() {
   return (
     <div className="site-shell">
       <div className="noise-layer" aria-hidden="true" />
+      {booting && <BootScreen />}
       <Header tone={headerTone} activeSection={activeSection} mobileNavOpen={mobileNavOpen} setMobileNavOpen={setMobileNavOpen} openPalette={() => setPaletteOpen(true)} scrollToSection={scrollToSection} />
 
       <main>
@@ -323,7 +369,7 @@ function App() {
               <div className="hero-kicker"><span className="live-signal" />Available for new systems <span className="kicker-rule" /> 09.2026</div>
               <p className="hero-index">7 / SYSTEMS SHIPPED <span>·</span> 5 / CLIENTS SERVED</p>
               <h1 id="hero-title">John Eduard<br /><em>De Villa</em></h1>
-              <p className="hero-role">Full-stack Developer <span>·</span> Nasugbu, Batangas, Philippines</p>
+              <p className="hero-role"><span className="typewriter" aria-label="Full-stack Developer"><span aria-hidden="true">{typedRole}</span><span className="type-caret" aria-hidden="true" /></span> <span>·</span> Nasugbu, Batangas, Philippines</p>
               <p className="hero-intro">From EHR schema design to IoT sensor pipelines. I build production systems for real clients while finishing my degree.</p>
               <div className="hero-actions">
                 <button className="button button-primary" onClick={() => scrollToSection('projects', 'Projects')}>See production work <ArrowUpRight /></button>
@@ -346,27 +392,27 @@ function App() {
             </div>
             <div className="about-layout">
               <div className="about-statement"><p>I build real, deployed systems for actual clients, not just class exercises. From EHR schema design to IoT sensor pipelines, I work solo, end-to-end, delivering production software while finishing my degree.</p><span className="margin-note">FIELD NOTE 001</span></div>
-              <div className="about-approach"><div className="mini-heading">Approach / 02</div><p>I use an AI-assisted workflow (OpenCode for codebase analysis, Claude Code &amp; GitHub Copilot for implementation) to move fast without cutting corners. I also tinker with hardware, run Linux (Hyprland, Omarchy), and wire up Arduinos and Raspberry Pis.</p></div>
+              <div className="about-approach"><div className="mini-heading">Approach / 02</div><p>I use an AI-assisted workflow (OpenCode for codebase analysis, Claude Code and OpenCode for implementation) to move fast without cutting corners. I also tinker with hardware, run Linux (Hyprland, Omarchy), and wire up Arduinos and Raspberry Pis.</p></div>
               <StatusPanel />
             </div>
-            <div id="skills" className="skills-block"><div className="mini-heading">Stack inventory / 07 groups</div><div className="skills-grid">{skillGroups.map((group) => <SkillGroup key={group.label} label={group.label} items={group.items} />)}</div></div>
+             <div id="skills" className="skills-block"><div className="mini-heading">Stack inventory / 08 groups</div><div className="skills-grid">{skillGroups.map((group) => <SkillGroup key={group.label} label={group.label} items={group.items} />)}</div></div>
           </div>
         </section>
 
         <section ref={projectsSectionRef} className="ink-section projects-section" id="projects" aria-labelledby="projects-title">
-          <div className="container">
-            <SectionLabel>Featured Projects</SectionLabel>
-            <div className="section-heading-row projects-heading"><div><h2 id="projects-title">Production systems<br /><em>I’ve built</em></h2></div><p className="section-subheading">Evidence over adjectives.<br />Open a case file.</p></div>
-             <div className="filter-bar" role="tablist" aria-label="Filter projects by status">{filters.map((option) => <button key={option} className={`filter-button ${filter === option ? 'is-selected' : ''}`} role="tab" aria-selected={filter === option} onClick={() => { setFilter(option); setRevealedProjectCount(projects.length); }}><span className="filter-count">{option === 'All' ? projects.length : projects.filter((project) => project.status === option).length}</span>{option}</button>)}</div>
-             <div className="project-list">{visibleProjects.map((project, index) => <ProjectCard key={project.id} project={project} expanded={expandedProjects.includes(project.id)} toggleProject={toggleProject} inspectProject={openInspection} revealed={!scrollLockEnabled || reducedMotion || index < revealedProjectCount} />)}</div>
-          </div>
+            <div ref={projectsFrameRef} className="container projects-pin-frame">
+             <div className="projects-intro"><SectionLabel>Featured Projects</SectionLabel>
+             <div className="section-heading-row projects-heading"><div><h2 id="projects-title">Production systems<br /><em>I’ve built</em></h2></div><p className="section-subheading">Evidence over adjectives.<br />Open a case file.</p></div>
+             <div className="filter-bar" role="tablist" aria-label="Filter projects by status">{filters.map((option) => <button key={option} className={`filter-button ${filter === option ? 'is-selected' : ''}`} role="tab" aria-selected={filter === option} onClick={() => setFilter(option)}><span className="filter-count">{option === 'All' ? projects.length : projects.filter((project) => project.status === option).length}</span>{option}</button>)}</div>
+             </div><div className="projects-scroll-stage" ref={projectsStageRef}><div className="project-list project-deck" ref={projectListRef}>{visibleProjects.map((project) => <ProjectCard key={project.id} project={project} expanded={expandedProjects.includes(project.id)} toggleProject={toggleProject} inspectProject={openInspection} />)}</div></div>
+           </div>
         </section>
 
-        <TimelineSection scrollToSection={scrollToSection} sectionRef={timelineSectionRef} trackRef={timelineTrackRef} />
+        <TimelineSection scrollToSection={scrollToSection} sectionRef={timelineSectionRef} viewportRef={timelineViewportRef} trackRef={timelineTrackRef} />
         <CertificationsSection />
 
         <section className="contact-section" id="contact" aria-labelledby="contact-title">
-          <div className="container contact-layout"><div><SectionLabel>Contact</SectionLabel><h2 id="contact-title">Let’s talk about<br /><em>your system</em></h2></div><div className="contact-copy"><p>I&apos;m available for new projects, freelance work, and collaborations. Email works best. I reply within 24 hours.</p><button className="email-button" onClick={copyEmail} aria-label={`Copy ${email}`}><span className="email-prefix">mailto://</span>{email}<ArrowUpRight /></button><div className="contact-meta"><span>Nasugbu, Batangas, Philippines</span><div className="social-row" aria-label="Social links unavailable"><span className="social-disabled">GitHub</span><span className="social-disabled">LinkedIn</span><span className="social-disabled">Facebook</span></div></div><button className="resume-button" onClick={downloadResume}>{resumeState === 'preparing' ? 'Preparing…' : resumeState === 'saved' ? '✓ Saved' : 'Download Résumé'}<ArrowUpRight /></button></div></div>
+          <div className="container contact-layout"><div><SectionLabel>Contact</SectionLabel><h2 id="contact-title">Let’s talk about<br /><em>your system</em></h2></div><div className="contact-copy section-scroll-reveal"><p>I&apos;m available for new projects, freelance work, and collaborations. Email works best. I reply within 24 hours.</p><button className="email-button" onClick={copyEmail} aria-label={`Copy ${email}`}><span className="email-prefix">mailto://</span>{email}<ArrowUpRight /></button><div className="contact-meta"><span>Nasugbu, Batangas, Philippines</span><div className="social-row" aria-label="Social links"><a className="social-link" href="https://github.com/23-74173-cpu" target="_blank" rel="noreferrer"><SocialIcon network="github" />GitHub</a><a className="social-link" href="https://web.facebook.com/joed.devilla/" target="_blank" rel="noreferrer"><SocialIcon network="facebook" />Facebook</a><a className="social-link" href="https://www.linkedin.com/in/john-eduard-de-villa-78689935a/" target="_blank" rel="noreferrer"><SocialIcon network="linkedin" />LinkedIn</a></div></div><button className="resume-button" onClick={downloadResume}>{resumeState === 'preparing' ? 'Preparing…' : resumeState === 'saved' ? '✓ Saved' : 'Download Résumé'}<ArrowUpRight /></button></div></div>
         </section>
       </main>
 
@@ -378,6 +424,10 @@ function App() {
       {inspectionProject && <InspectionModal project={inspectionProject} close={() => setInspectionProject(null)} />}
     </div>
   );
+}
+
+function BootScreen() {
+  return <div className="boot-screen" role="status" aria-label="Initializing JEDV portfolio"><div className="boot-console"><div className="boot-console-top"><span className="palette-lights" aria-hidden="true"><i /><i /><i /></span><span>JEDV / SYSTEM MAP</span><span>BOOT 01</span></div><div className="boot-mark">JEDV<span>_</span></div><div className="boot-lines"><p><span>&gt;</span> Establishing field connection</p><p><span>&gt;</span> Loading production archive</p><p><span>&gt;</span> Mounting interface</p></div><div className="boot-progress"><span /></div><div className="boot-status"><span>INITIALIZING</span><span>PLEASE WAIT</span></div></div></div>;
 }
 
 function Header({ tone, activeSection, mobileNavOpen, setMobileNavOpen, openPalette, scrollToSection }: { tone: HeaderTone; activeSection: string; mobileNavOpen: boolean; setMobileNavOpen: (open: boolean) => void; openPalette: () => void; scrollToSection: (id: string, label: string) => void }) {
@@ -397,20 +447,20 @@ function StatusPanel() {
 }
 
 function SkillGroup({ label, items }: { label: string; items: string[] }) {
-  return <div className="skill-group"><h3>{label}</h3><div className="pill-list">{items.map((item) => <span className="skill-pill" key={item}>{item}</span>)}</div></div>;
+  return <div className="skill-group"><h3>{label}</h3><div className="pill-list">{items.map((item) => <span className="skill-pill" key={item}>{item === 'Figma' && <FigmaIcon />}{item}</span>)}</div></div>;
 }
 
-function ProjectCard({ project, expanded, toggleProject, inspectProject, revealed }: { project: Project; expanded: boolean; toggleProject: (id: string) => void; inspectProject: (project: Project) => void; revealed: boolean }) {
+function ProjectCard({ project, expanded, toggleProject, inspectProject }: { project: Project; expanded: boolean; toggleProject: (id: string) => void; inspectProject: (project: Project) => void }) {
   const detailId = `${project.id}-details`;
-  return <article className={`project-card project-${project.status.toLowerCase().replace(' ', '-')} ${revealed ? 'is-revealed' : ''}`} id={project.id} aria-hidden={!revealed} inert={!revealed}><div className="project-number" aria-hidden="true">{project.number}</div><div className="project-main"><div className="project-topline"><StatusBadge status={project.status} /><span className="project-repo">Repo coming soon</span></div><h3>{project.title}</h3><p className="project-subtitle">{project.subtitle}</p><div className="project-impact"><span>Impact</span><p>{project.impact}</p></div><div className="stack-row" aria-label={`${project.title} technology stack`}>{project.stack.map((item) => <span key={item}>{item}</span>)}</div></div><div className="project-controls"><button className="details-button" aria-expanded={expanded} aria-controls={detailId} onClick={() => toggleProject(project.id)}>{expanded ? 'Close case file' : 'Read case file'}<span className="plus-icon" aria-hidden="true">{expanded ? '−' : '+'}</span></button><button className="project-jump" onClick={() => inspectProject(project)} aria-label={`Inspect ${project.title}`}>Inspect <ArrowUpRight /></button></div>{expanded && <div className="project-details" id={detailId}><div className="details-label">CASE FILE / BUILD NOTES</div><ul>{project.details.map((detail) => <li key={detail}>{detail}</li>)}</ul></div>}</article>;
+  return <article className={`project-card project-${project.status.toLowerCase().replace(' ', '-')}`} id={project.id}><div className="project-card-content"><div className="project-number" aria-hidden="true">{project.number}</div><div className="project-main"><div className="project-topline"><StatusBadge status={project.status} /><span className="project-repo">Repo coming soon</span></div><h3>{project.title}</h3><p className="project-subtitle">{project.subtitle}</p><div className="project-impact"><span>Impact</span><p>{project.impact}</p></div><div className="stack-row" aria-label={`${project.title} technology stack`}>{project.stack.map((item) => <span key={item}>{item}</span>)}</div></div><div className="project-controls"><button className="details-button" aria-expanded={expanded} aria-controls={detailId} onClick={() => toggleProject(project.id)}>{expanded ? 'Close case file' : 'Read case file'}<span className="plus-icon" aria-hidden="true">{expanded ? '−' : '+'}</span></button><button className="project-jump" onClick={() => inspectProject(project)} aria-label={`Inspect ${project.title}`}>Inspect <ArrowUpRight /></button></div>{expanded && <div className="project-details" id={detailId}><div className="details-label">CASE FILE / BUILD NOTES</div><ul>{project.details.map((detail) => <li key={detail}>{detail}</li>)}</ul></div>}</div></article>;
 }
 
-function TimelineSection({ scrollToSection, sectionRef, trackRef }: { scrollToSection: (id: string, label: string) => void; sectionRef: RefObject<HTMLElement | null>; trackRef: RefObject<HTMLDivElement | null> }) {
-  return <section ref={sectionRef} className="paper-section timeline-section" id="experience" aria-labelledby="experience-title"><div className="container"><SectionLabel>Experience</SectionLabel><div className="section-heading-row"><h2 id="experience-title">Timeline</h2><p className="section-subheading timeline-hint">Scroll horizontally <span aria-hidden="true">→</span></p></div><div className="timeline-badges"><span>Education</span><span>Freelance</span></div><div className="timeline-track" ref={trackRef}>{timeline.map((entry, index) => <article className="timeline-entry" key={`${entry.year}-${entry.title}`}><div className="timeline-marker"><span>{String(index + 1).padStart(2, '0')}</span></div><div className="timeline-year">{entry.year}</div><div className="timeline-entry-body"><span className={`timeline-badge badge-${entry.badge.toLowerCase()}`}>{entry.badge}</span><h3>{entry.title}</h3><p className="timeline-role">{entry.role} <span>·</span> {entry.organization}</p><p>{entry.description}</p></div></article>)}</div><button className="timeline-cta" onClick={() => scrollToSection('contact', 'Contact')}>Start a conversation <ArrowUpRight /></button></div></section>;
+function TimelineSection({ scrollToSection, sectionRef, viewportRef, trackRef }: { scrollToSection: (id: string, label: string) => void; sectionRef: RefObject<HTMLElement | null>; viewportRef: RefObject<HTMLDivElement | null>; trackRef: RefObject<HTMLDivElement | null> }) {
+  return <section ref={sectionRef} className="paper-section timeline-section" id="experience" aria-labelledby="experience-title"><div className="container"><SectionLabel>Experience</SectionLabel><div className="section-heading-row"><h2 id="experience-title">Timeline</h2><p className="section-subheading timeline-hint">Scroll horizontally <span aria-hidden="true">→</span></p></div><div className="timeline-badges"><span>Education</span><span>Freelance</span></div><div className="timeline-viewport" ref={viewportRef} dir="ltr"><div className="timeline-track" ref={trackRef}>{timeline.map((entry, index) => <article className="timeline-entry" key={`${entry.year}-${entry.title}`}><div className="timeline-marker"><span>{String(index + 1).padStart(2, '0')}</span></div><div className="timeline-year">{entry.year}</div><div className="timeline-entry-body"><span className={`timeline-badge badge-${entry.badge.toLowerCase()}`}>{entry.badge}</span><h3>{entry.title}</h3><p className="timeline-role">{entry.role} <span>·</span> {entry.organization}</p><p>{entry.description}</p></div></article>)}</div></div><button className="timeline-cta" onClick={() => scrollToSection('contact', 'Contact')}>Start a conversation <ArrowUpRight /></button></div></section>;
 }
 
 function CertificationsSection() {
-  return <section className="ink-section certifications-section" id="certifications" aria-labelledby="certifications-title"><div className="container"><SectionLabel>Certifications</SectionLabel><div className="section-heading-row"><h2 id="certifications-title">Industry<br /><em>credentials</em></h2><p className="section-subheading">Signals of curiosity,<br />not just completion.</p></div><div className="certification-grid">{certifications.map((certification, index) => <article className="certification-card" key={certification.issuer}><div className="certification-index">0{index + 1} / CREDENTIAL</div><h3>{certification.issuer}</h3><ul>{certification.items.map((item) => <li key={item}><span aria-hidden="true">↳</span>{item}</li>)}</ul><div className="certification-seal" aria-hidden="true">VERIFIED<br />FIELD<br />SIGNAL</div></article>)}</div></div></section>;
+  return <section className="ink-section certifications-section" id="certifications" aria-labelledby="certifications-title"><div className="container"><SectionLabel>Certifications</SectionLabel><div className="section-heading-row"><h2 id="certifications-title">Industry<br /><em>credentials</em></h2><p className="section-subheading">Signals of curiosity,<br />not just completion.</p></div><div className="certification-grid">{certifications.map((certification, index) => <article className="certification-card section-scroll-reveal" key={certification.issuer}><div className="certification-index">0{index + 1} / CREDENTIAL</div><h3>{certification.issuer}</h3><ul>{certification.items.map((item) => <li key={item}><span aria-hidden="true">↳</span>{item}</li>)}</ul><div className="certification-seal" aria-hidden="true">VERIFIED<br />FIELD<br />SIGNAL</div></article>)}</div></div></section>;
 }
 
 function InspectionModal({ project, close }: { project: Project; close: () => void }) {

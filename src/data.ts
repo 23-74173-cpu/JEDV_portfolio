@@ -63,7 +63,7 @@ export const technologies = [
   'Claude Code',
   'OpenCode',
   'Cursor',
-  'GitHub Copilot',
+  'Figma',
 ];
 
 export const skillGroups = [
@@ -73,7 +73,8 @@ export const skillGroups = [
   { label: 'Database', items: ['MySQL', 'MariaDB', 'SQLite', 'AES-256-GCM Encryption'] },
   { label: 'Infrastructure & Tools', items: ['Docker', 'Git / GitHub', 'Railway', 'Hostinger', 'Vercel', 'XAMPP / LAMPP', 'Linux', 'Windows', 'Basic Networking'] },
   { label: 'Analytics', items: ['Power BI', 'Tableau', 'Data Modeling', 'Forecasting', 'SARIMA', 'XGBoost'] },
-  { label: 'AI-Assisted Development', items: ['Claude Code', 'OpenCode', 'Cursor', 'GitHub Copilot'] },
+  { label: 'AI-Assisted Development', items: ['Claude Code', 'OpenCode', 'Cursor'] },
+  { label: 'Design Tools', items: ['Figma'] },
 ];
 
 export const projects: Project[] = [
