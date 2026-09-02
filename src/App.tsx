@@ -1,9 +1,10 @@
-import { useEffect, useId, useRef, useState } from 'react';
-import type { KeyboardEvent as ReactKeyboardEvent, ReactNode } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import type { KeyboardEvent as ReactKeyboardEvent, ReactNode, RefObject } from 'react';
 import { certifications, email, projects, skillGroups, technologies, timeline, type Project, type ProjectStatus } from './data';
 import { resumeText } from './resume';
 
 type Theme = 'dark' | 'light';
+type HeaderTone = 'dark' | 'light';
 type Toast = { id: number; message: string };
 type PaletteCommand = { id: string; label: string; group: string; hint?: string; action: () => void };
 
@@ -16,6 +17,12 @@ const navItems = [
 ];
 
 const filters: Array<'All' | ProjectStatus> = ['All', 'Shipped', 'In Progress', 'Active'];
+const DESKTOP_SCROLL_LOCK_QUERY = '(min-width: 901px) and (prefers-reduced-motion: no-preference)';
+const LIGHT_HEADER_SECTIONS = new Set(['about', 'experience', 'contact']);
+
+function isDesktopScrollLockEnabled() {
+  return typeof window !== 'undefined' && window.matchMedia(DESKTOP_SCROLL_LOCK_QUERY).matches;
+}
 
 function ArrowUpRight() {
   return <span aria-hidden="true" className="arrow-icon">↗</span>;
@@ -31,7 +38,7 @@ function StatusBadge({ status }: { status: ProjectStatus }) {
 
 function App() {
   const [theme, setTheme] = useState<Theme>(() => (localStorage.getItem('jedv-theme') as Theme | null) ?? 'dark');
-  const [activeSection, setActiveSection] = useState('about');
+  const [activeSection, setActiveSection] = useState('hero');
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [paletteQuery, setPaletteQuery] = useState('');
@@ -42,8 +49,17 @@ function App() {
   const [marqueePaused, setMarqueePaused] = useState(false);
   const [resumeState, setResumeState] = useState<'idle' | 'preparing' | 'saved'>('idle');
   const [reducedMotion, setReducedMotion] = useState(false);
+  const [inspectionProject, setInspectionProject] = useState<Project | null>(null);
+  const [scrollLockEnabled, setScrollLockEnabled] = useState(isDesktopScrollLockEnabled);
+  const [revealedProjectCount, setRevealedProjectCount] = useState(() => isDesktopScrollLockEnabled() ? 1 : projects.length);
   const paletteInputRef = useRef<HTMLInputElement>(null);
+  const projectsSectionRef = useRef<HTMLElement>(null);
+  const timelineSectionRef = useRef<HTMLElement>(null);
+  const timelineTrackRef = useRef<HTMLDivElement>(null);
+  const touchLastY = useRef<number | null>(null);
+  const lastProjectReveal = useRef(0);
   const toastId = useRef(0);
+  const visibleProjects = projects.filter((project) => filter === 'All' || project.status === filter);
 
   const notify = (message: string) => {
     const id = toastId.current + 1;
@@ -101,11 +117,17 @@ function App() {
   };
 
   const openProject = (project: Project) => {
+    setRevealedProjectCount(projects.length);
     setExpandedProjects((current) => current.includes(project.id) ? current : [...current, project.id]);
     scrollToSection('projects', 'Projects', false);
     window.setTimeout(() => document.getElementById(project.id)?.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth', block: 'center' }), 80);
     setPaletteOpen(false);
     notify(`Opening ${project.title}`);
+  };
+
+  const openInspection = (project: Project) => {
+    setInspectionProject(project);
+    setPaletteOpen(false);
   };
 
   useEffect(() => {
@@ -121,13 +143,34 @@ function App() {
   }, []);
 
   useEffect(() => {
-    const sections = navItems.map((item) => document.getElementById(item.id)).filter((section): section is HTMLElement => Boolean(section));
-    const observer = new IntersectionObserver((entries) => {
-      const visible = entries.filter((entry) => entry.isIntersecting).sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
-      if (visible) setActiveSection(visible.target.id);
-    }, { rootMargin: '-20% 0px -60% 0px', threshold: [0.1, 0.25, 0.5] });
-    sections.forEach((section) => observer.observe(section));
-    return () => observer.disconnect();
+    const mediaQuery = window.matchMedia(DESKTOP_SCROLL_LOCK_QUERY);
+    const updateScrollLock = () => {
+      const enabled = mediaQuery.matches;
+      setScrollLockEnabled(enabled);
+      setRevealedProjectCount(enabled ? 1 : projects.length);
+    };
+    updateScrollLock();
+    mediaQuery.addEventListener('change', updateScrollLock);
+    return () => mediaQuery.removeEventListener('change', updateScrollLock);
+  }, []);
+
+  useLayoutEffect(() => {
+    if (timelineTrackRef.current) timelineTrackRef.current.scrollLeft = 0;
+  }, []);
+
+  useEffect(() => {
+    const updateActiveSection = () => {
+      const headerLine = 74;
+      const currentSection = navItems.map((item) => document.getElementById(item.id)).find((section) => {
+        if (!section) return false;
+        const rect = section.getBoundingClientRect();
+        return rect.top <= headerLine && rect.bottom > headerLine;
+      });
+      setActiveSection(currentSection?.id ?? 'hero');
+    };
+    updateActiveSection();
+    window.addEventListener('scroll', updateActiveSection, { passive: true });
+    return () => window.removeEventListener('scroll', updateActiveSection);
   }, []);
 
   useEffect(() => {
@@ -139,6 +182,7 @@ function App() {
       if (event.key === 'Escape') {
         setPaletteOpen(false);
         setMobileNavOpen(false);
+        setInspectionProject(null);
       }
     };
     window.addEventListener('keydown', handleShortcut);
@@ -153,6 +197,92 @@ function App() {
     }
   }, [paletteOpen]);
 
+  useEffect(() => {
+    if (!scrollLockEnabled) return undefined;
+
+    const headerOffset = 74;
+    const isProjectLockZone = () => {
+      const section = projectsSectionRef.current;
+      if (!section) return false;
+      const rect = section.getBoundingClientRect();
+      return rect.top <= headerOffset && rect.bottom > headerOffset;
+    };
+    const isTimelineLockZone = () => {
+      const section = timelineSectionRef.current;
+      const track = timelineTrackRef.current;
+      if (!section || !track) return false;
+      const sectionRect = section.getBoundingClientRect();
+      const trackRect = track.getBoundingClientRect();
+      return sectionRect.top <= headerOffset && sectionRect.bottom > headerOffset && trackRect.top <= window.innerHeight && trackRect.bottom > headerOffset;
+    };
+    const revealNextProject = () => {
+      const now = performance.now();
+      if (now - lastProjectReveal.current < 110) return;
+      lastProjectReveal.current = now;
+      setRevealedProjectCount((current) => Math.min(current + 1, visibleProjects.length));
+    };
+    const moveTimeline = (delta: number) => {
+      const track = timelineTrackRef.current;
+      if (!track || !delta) return false;
+      const maximum = Math.max(track.scrollWidth - track.clientWidth, 0);
+      const nextScrollLeft = Math.max(0, Math.min(track.scrollLeft + delta, maximum));
+      if (nextScrollLeft === track.scrollLeft) return false;
+      track.scrollLeft = nextScrollLeft;
+      return true;
+    };
+    const handleWheel = (event: WheelEvent) => {
+      if (paletteOpen || inspectionProject) return;
+      if (event.deltaY > 0 && isProjectLockZone() && revealedProjectCount < visibleProjects.length) {
+        event.preventDefault();
+        revealNextProject();
+        return;
+      }
+      if (!isTimelineLockZone()) return;
+      const delta = event.deltaY || event.deltaX;
+      const track = timelineTrackRef.current;
+      if (!track || !delta) return;
+      const maximum = Math.max(track.scrollWidth - track.clientWidth, 0);
+      const movingRight = delta > 0;
+      const canMove = movingRight ? track.scrollLeft < maximum - 1 : track.scrollLeft > 0;
+      if (canMove) {
+        event.preventDefault();
+        moveTimeline(delta);
+      }
+    };
+    const handleTouchStart = (event: TouchEvent) => {
+      if (event.touches.length === 1) touchLastY.current = event.touches[0].clientY;
+    };
+    const handleTouchMove = (event: TouchEvent) => {
+      if (paletteOpen || inspectionProject || event.touches.length !== 1 || touchLastY.current === null) return;
+      const currentY = event.touches[0].clientY;
+      const delta = touchLastY.current - currentY;
+      if (delta > 0 && isProjectLockZone() && revealedProjectCount < visibleProjects.length) {
+        event.preventDefault();
+        touchLastY.current = currentY;
+        if (Math.abs(delta) >= 18) revealNextProject();
+        return;
+      }
+      if (isTimelineLockZone() && moveTimeline(delta)) {
+        event.preventDefault();
+        touchLastY.current = currentY;
+      }
+    };
+    const resetTouch = () => { touchLastY.current = null; };
+
+    window.addEventListener('wheel', handleWheel, { passive: false });
+    window.addEventListener('touchstart', handleTouchStart, { passive: true });
+    window.addEventListener('touchmove', handleTouchMove, { passive: false });
+    window.addEventListener('touchend', resetTouch, { passive: true });
+    window.addEventListener('touchcancel', resetTouch, { passive: true });
+    return () => {
+      window.removeEventListener('wheel', handleWheel);
+      window.removeEventListener('touchstart', handleTouchStart);
+      window.removeEventListener('touchmove', handleTouchMove);
+      window.removeEventListener('touchend', resetTouch);
+      window.removeEventListener('touchcancel', resetTouch);
+    };
+  }, [inspectionProject, paletteOpen, revealedProjectCount, scrollLockEnabled, visibleProjects.length]);
+
   const commands: PaletteCommand[] = [
     ...navItems.map((item) => ({ id: `jump-${item.id}`, label: item.label, group: 'Jump to', hint: `/${item.id}`, action: () => scrollToSection(item.id, item.label) })),
     { id: 'jump-skills', label: 'Skills', group: 'Jump to', hint: '/skills', action: () => scrollToSection('skills', 'Skills') },
@@ -163,6 +293,7 @@ function App() {
   ];
 
   const matchingCommands = commands.filter((command) => `${command.label} ${command.group} ${command.hint ?? ''}`.toLowerCase().includes(paletteQuery.toLowerCase()));
+  const headerTone: HeaderTone = LIGHT_HEADER_SECTIONS.has(activeSection) ? 'light' : 'dark';
 
   const handlePaletteKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
     if (event.key === 'ArrowDown') {
@@ -182,7 +313,7 @@ function App() {
   return (
     <div className="site-shell">
       <div className="noise-layer" aria-hidden="true" />
-      <Header activeSection={activeSection} mobileNavOpen={mobileNavOpen} setMobileNavOpen={setMobileNavOpen} openPalette={() => setPaletteOpen(true)} scrollToSection={scrollToSection} />
+      <Header tone={headerTone} activeSection={activeSection} mobileNavOpen={mobileNavOpen} setMobileNavOpen={setMobileNavOpen} openPalette={() => setPaletteOpen(true)} scrollToSection={scrollToSection} />
 
       <main>
         <section className="hero-section" aria-labelledby="hero-title">
@@ -222,16 +353,16 @@ function App() {
           </div>
         </section>
 
-        <section className="ink-section projects-section" id="projects" aria-labelledby="projects-title">
+        <section ref={projectsSectionRef} className="ink-section projects-section" id="projects" aria-labelledby="projects-title">
           <div className="container">
             <SectionLabel>Featured Projects</SectionLabel>
             <div className="section-heading-row projects-heading"><div><h2 id="projects-title">Production systems<br /><em>I’ve built</em></h2></div><p className="section-subheading">Evidence over adjectives.<br />Open a case file.</p></div>
-            <div className="filter-bar" role="tablist" aria-label="Filter projects by status">{filters.map((option) => <button key={option} className={`filter-button ${filter === option ? 'is-selected' : ''}`} role="tab" aria-selected={filter === option} onClick={() => setFilter(option)}><span className="filter-count">{option === 'All' ? projects.length : projects.filter((project) => project.status === option).length}</span>{option}</button>)}</div>
-            <div className="project-list">{projects.filter((project) => filter === 'All' || project.status === filter).map((project) => <ProjectCard key={project.id} project={project} expanded={expandedProjects.includes(project.id)} toggleProject={toggleProject} openProject={openProject} />)}</div>
+             <div className="filter-bar" role="tablist" aria-label="Filter projects by status">{filters.map((option) => <button key={option} className={`filter-button ${filter === option ? 'is-selected' : ''}`} role="tab" aria-selected={filter === option} onClick={() => { setFilter(option); setRevealedProjectCount(projects.length); }}><span className="filter-count">{option === 'All' ? projects.length : projects.filter((project) => project.status === option).length}</span>{option}</button>)}</div>
+             <div className="project-list">{visibleProjects.map((project, index) => <ProjectCard key={project.id} project={project} expanded={expandedProjects.includes(project.id)} toggleProject={toggleProject} inspectProject={openInspection} revealed={!scrollLockEnabled || reducedMotion || index < revealedProjectCount} />)}</div>
           </div>
         </section>
 
-        <TimelineSection scrollToSection={scrollToSection} />
+        <TimelineSection scrollToSection={scrollToSection} sectionRef={timelineSectionRef} trackRef={timelineTrackRef} />
         <CertificationsSection />
 
         <section className="contact-section" id="contact" aria-labelledby="contact-title">
@@ -244,12 +375,13 @@ function App() {
       <div className="toast-region" aria-live="polite" aria-atomic="true">{toasts.map((toast) => <div className="toast" key={toast.id}><span className="toast-mark">✓</span>{toast.message}</div>)}</div>
 
       {paletteOpen && <CommandPalette inputRef={paletteInputRef} query={paletteQuery} setQuery={setPaletteQuery} selectedCommand={selectedCommand} setSelectedCommand={setSelectedCommand} commands={matchingCommands} onKeyDown={handlePaletteKeyDown} close={() => setPaletteOpen(false)} />}
+      {inspectionProject && <InspectionModal project={inspectionProject} close={() => setInspectionProject(null)} />}
     </div>
   );
 }
 
-function Header({ activeSection, mobileNavOpen, setMobileNavOpen, openPalette, scrollToSection }: { activeSection: string; mobileNavOpen: boolean; setMobileNavOpen: (open: boolean) => void; openPalette: () => void; scrollToSection: (id: string, label: string) => void }) {
-  return <header className="site-header"><div className="container header-inner"><button className="wordmark" onClick={() => scrollToSection('about', 'About')} aria-label="Go to top">JEDV<span className="wordmark-cursor">_</span></button><nav className="desktop-nav" aria-label="Primary navigation">{navItems.map((item) => <button key={item.id} className={activeSection === item.id ? 'active' : ''} onClick={() => scrollToSection(item.id, item.label)}>{item.label}</button>)}</nav><div className="header-actions"><button className="jump-button" onClick={openPalette}>Jump <kbd>⌘K</kbd></button><button className="mobile-menu-button" aria-expanded={mobileNavOpen} aria-controls="mobile-nav" onClick={() => setMobileNavOpen(!mobileNavOpen)}><span className="sr-only">{mobileNavOpen ? 'Close menu' : 'Open menu'}</span><span className="menu-lines" aria-hidden="true"><i /><i /></span></button></div></div>{mobileNavOpen && <nav id="mobile-nav" className="mobile-nav" aria-label="Mobile navigation">{navItems.map((item) => <button key={item.id} className={activeSection === item.id ? 'active' : ''} onClick={() => scrollToSection(item.id, item.label)}>{item.label}<ArrowUpRight /></button>)}<button onClick={openPalette}>Open command palette <kbd>⌘K</kbd></button></nav>}</header>;
+function Header({ tone, activeSection, mobileNavOpen, setMobileNavOpen, openPalette, scrollToSection }: { tone: HeaderTone; activeSection: string; mobileNavOpen: boolean; setMobileNavOpen: (open: boolean) => void; openPalette: () => void; scrollToSection: (id: string, label: string) => void }) {
+  return <header className={`site-header header-${tone}`}><div className="container header-inner"><button className="wordmark" onClick={() => scrollToSection('about', 'About')} aria-label="Go to top">JEDV<span className="wordmark-cursor">_</span></button><nav className="desktop-nav" aria-label="Primary navigation">{navItems.map((item) => <button key={item.id} className={activeSection === item.id ? 'active' : ''} onClick={() => scrollToSection(item.id, item.label)}>{item.label}</button>)}</nav><div className="header-actions"><button className="jump-button" onClick={openPalette}>Jump <kbd>⌘K</kbd></button><button className="mobile-menu-button" aria-expanded={mobileNavOpen} aria-controls="mobile-nav" onClick={() => setMobileNavOpen(!mobileNavOpen)}><span className="sr-only">{mobileNavOpen ? 'Close menu' : 'Open menu'}</span><span className="menu-lines" aria-hidden="true"><i /><i /></span></button></div></div>{mobileNavOpen && <nav id="mobile-nav" className="mobile-nav" aria-label="Mobile navigation">{navItems.map((item) => <button key={item.id} className={activeSection === item.id ? 'active' : ''} onClick={() => scrollToSection(item.id, item.label)}>{item.label}<ArrowUpRight /></button>)}<button onClick={openPalette}>Open command palette <kbd>⌘K</kbd></button></nav>}</header>;
 }
 
 function HeroReadout() {
@@ -268,17 +400,28 @@ function SkillGroup({ label, items }: { label: string; items: string[] }) {
   return <div className="skill-group"><h3>{label}</h3><div className="pill-list">{items.map((item) => <span className="skill-pill" key={item}>{item}</span>)}</div></div>;
 }
 
-function ProjectCard({ project, expanded, toggleProject, openProject }: { project: Project; expanded: boolean; toggleProject: (id: string) => void; openProject: (project: Project) => void }) {
+function ProjectCard({ project, expanded, toggleProject, inspectProject, revealed }: { project: Project; expanded: boolean; toggleProject: (id: string) => void; inspectProject: (project: Project) => void; revealed: boolean }) {
   const detailId = `${project.id}-details`;
-  return <article className={`project-card project-${project.status.toLowerCase().replace(' ', '-')}`} id={project.id}><div className="project-number" aria-hidden="true">{project.number}</div><div className="project-main"><div className="project-topline"><StatusBadge status={project.status} /><span className="project-repo">Repo coming soon</span></div><h3>{project.title}</h3><p className="project-subtitle">{project.subtitle}</p><div className="project-impact"><span>Impact</span><p>{project.impact}</p></div><div className="stack-row" aria-label={`${project.title} technology stack`}>{project.stack.map((item) => <span key={item}>{item}</span>)}</div></div><div className="project-controls"><button className="details-button" aria-expanded={expanded} aria-controls={detailId} onClick={() => toggleProject(project.id)}>{expanded ? 'Close case file' : 'Read case file'}<span className="plus-icon" aria-hidden="true">{expanded ? '−' : '+'}</span></button><button className="project-jump" onClick={() => openProject(project)} aria-label={`Open ${project.title}`}>Inspect <ArrowUpRight /></button></div>{expanded && <div className="project-details" id={detailId}><div className="details-label">CASE FILE / BUILD NOTES</div><ul>{project.details.map((detail) => <li key={detail}>{detail}</li>)}</ul></div>}</article>;
+  return <article className={`project-card project-${project.status.toLowerCase().replace(' ', '-')} ${revealed ? 'is-revealed' : ''}`} id={project.id} aria-hidden={!revealed} inert={!revealed}><div className="project-number" aria-hidden="true">{project.number}</div><div className="project-main"><div className="project-topline"><StatusBadge status={project.status} /><span className="project-repo">Repo coming soon</span></div><h3>{project.title}</h3><p className="project-subtitle">{project.subtitle}</p><div className="project-impact"><span>Impact</span><p>{project.impact}</p></div><div className="stack-row" aria-label={`${project.title} technology stack`}>{project.stack.map((item) => <span key={item}>{item}</span>)}</div></div><div className="project-controls"><button className="details-button" aria-expanded={expanded} aria-controls={detailId} onClick={() => toggleProject(project.id)}>{expanded ? 'Close case file' : 'Read case file'}<span className="plus-icon" aria-hidden="true">{expanded ? '−' : '+'}</span></button><button className="project-jump" onClick={() => inspectProject(project)} aria-label={`Inspect ${project.title}`}>Inspect <ArrowUpRight /></button></div>{expanded && <div className="project-details" id={detailId}><div className="details-label">CASE FILE / BUILD NOTES</div><ul>{project.details.map((detail) => <li key={detail}>{detail}</li>)}</ul></div>}</article>;
 }
 
-function TimelineSection({ scrollToSection }: { scrollToSection: (id: string, label: string) => void }) {
-  return <section className="paper-section timeline-section" id="experience" aria-labelledby="experience-title"><div className="container"><SectionLabel>Experience</SectionLabel><div className="section-heading-row"><h2 id="experience-title">Timeline</h2><p className="section-subheading timeline-hint">Scroll horizontally <span aria-hidden="true">→</span></p></div><div className="timeline-badges"><span>Education</span><span>Freelance</span></div><div className="timeline-track">{timeline.map((entry, index) => <article className="timeline-entry" key={`${entry.year}-${entry.title}`}><div className="timeline-marker"><span>{String(index + 1).padStart(2, '0')}</span></div><div className="timeline-year">{entry.year}</div><div className="timeline-entry-body"><span className={`timeline-badge badge-${entry.badge.toLowerCase()}`}>{entry.badge}</span><h3>{entry.title}</h3><p className="timeline-role">{entry.role} <span>·</span> {entry.organization}</p><p>{entry.description}</p></div></article>)}</div><button className="timeline-cta" onClick={() => scrollToSection('contact', 'Contact')}>Start a conversation <ArrowUpRight /></button></div></section>;
+function TimelineSection({ scrollToSection, sectionRef, trackRef }: { scrollToSection: (id: string, label: string) => void; sectionRef: RefObject<HTMLElement | null>; trackRef: RefObject<HTMLDivElement | null> }) {
+  return <section ref={sectionRef} className="paper-section timeline-section" id="experience" aria-labelledby="experience-title"><div className="container"><SectionLabel>Experience</SectionLabel><div className="section-heading-row"><h2 id="experience-title">Timeline</h2><p className="section-subheading timeline-hint">Scroll horizontally <span aria-hidden="true">→</span></p></div><div className="timeline-badges"><span>Education</span><span>Freelance</span></div><div className="timeline-track" ref={trackRef}>{timeline.map((entry, index) => <article className="timeline-entry" key={`${entry.year}-${entry.title}`}><div className="timeline-marker"><span>{String(index + 1).padStart(2, '0')}</span></div><div className="timeline-year">{entry.year}</div><div className="timeline-entry-body"><span className={`timeline-badge badge-${entry.badge.toLowerCase()}`}>{entry.badge}</span><h3>{entry.title}</h3><p className="timeline-role">{entry.role} <span>·</span> {entry.organization}</p><p>{entry.description}</p></div></article>)}</div><button className="timeline-cta" onClick={() => scrollToSection('contact', 'Contact')}>Start a conversation <ArrowUpRight /></button></div></section>;
 }
 
 function CertificationsSection() {
   return <section className="ink-section certifications-section" id="certifications" aria-labelledby="certifications-title"><div className="container"><SectionLabel>Certifications</SectionLabel><div className="section-heading-row"><h2 id="certifications-title">Industry<br /><em>credentials</em></h2><p className="section-subheading">Signals of curiosity,<br />not just completion.</p></div><div className="certification-grid">{certifications.map((certification, index) => <article className="certification-card" key={certification.issuer}><div className="certification-index">0{index + 1} / CREDENTIAL</div><h3>{certification.issuer}</h3><ul>{certification.items.map((item) => <li key={item}><span aria-hidden="true">↳</span>{item}</li>)}</ul><div className="certification-seal" aria-hidden="true">VERIFIED<br />FIELD<br />SIGNAL</div></article>)}</div></div></section>;
+}
+
+function InspectionModal({ project, close }: { project: Project; close: () => void }) {
+  const titleId = useId();
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    closeButtonRef.current?.focus();
+  }, []);
+
+  return <div className="inspection-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) close(); }} onWheel={(event) => event.stopPropagation()}><section className="inspection-dialog" role="dialog" aria-modal="true" aria-labelledby={titleId}><div className="inspection-chrome"><span className="palette-lights" aria-hidden="true"><i /><i /><i /></span><span>CASE FILE / {project.number}</span><button ref={closeButtonRef} className="inspection-close" onClick={close} aria-label="Close inspection dialog">×</button></div><div className="inspection-content"><StatusBadge status={project.status} /><h2 id={titleId}>Inspection<br /><em>coming soon</em></h2><p>Case file inspection for {project.title} is not available yet.</p><button className="inspection-action" onClick={close}>Close case file <span aria-hidden="true">↗</span></button></div></section></div>;
 }
 
 function CommandPalette({ inputRef, query, setQuery, selectedCommand, setSelectedCommand, commands, onKeyDown, close }: { inputRef: React.RefObject<HTMLInputElement | null>; query: string; setQuery: (value: string) => void; selectedCommand: number; setSelectedCommand: (value: number) => void; commands: PaletteCommand[]; onKeyDown: (event: ReactKeyboardEvent<HTMLInputElement>) => void; close: () => void }) {
