@@ -1,0 +1,30 @@
+import { email, projects, skillGroups } from './data';
+
+export const resumeText = [
+  'JOHN EDUARD DE VILLA',
+  'Full-stack Developer',
+  'Nasugbu, Batangas, Philippines',
+  email,
+  '',
+  'PROFILE',
+  'I build real, deployed systems for actual clients, not just class exercises. From EHR schema design to IoT sensor pipelines, I work solo, end-to-end, delivering production software while finishing my degree.',
+  '',
+  'EDUCATION',
+  '4th-year BSIT, Business Analytics, Batangas State University, ARASOF Nasugbu',
+  "Dean's List",
+  '',
+  'PROJECTS',
+  ...projects.flatMap((project) => [
+    `${project.title} | ${project.status}`,
+    project.subtitle,
+    project.impact,
+    `Stack: ${project.stack.join(' · ')}`,
+    '',
+  ]),
+  'SKILLS',
+  ...skillGroups.map((group) => `${group.label}: ${group.items.join(', ')}`),
+  '',
+  'CERTIFICATIONS',
+  'Microsoft IT Specialist: Data Analytics; Databases; Device Configuration & Management (Windows 10)',
+  'Cisco Networking Academy: CCNA Switching, Routing & Wireless Essentials; AI Fundamentals with IBM SkillsBuild; Data Analytics Essentials; Introduction to Data Science',
+].join('\n');
