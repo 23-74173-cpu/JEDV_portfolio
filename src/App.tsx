@@ -38,6 +38,7 @@ import { FaWindows } from 'react-icons/fa';
 import { VscSymbolMethod, VscServerProcess } from 'react-icons/vsc';
 import { TbChartBar, TbLock, TbNetwork } from 'react-icons/tb';
 import { MdOutlineTableChart, MdOutlineSecurity } from 'react-icons/md';
+import { FiDatabase, FiTerminal, FiBox, FiCpu } from 'react-icons/fi';
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -115,9 +116,11 @@ function SkillIcon({ name }: { name: string }) {
   if (n.includes('docker')) return wrap(<SiDocker color="#2496ED" />);
   if (n.includes('xampp') || n.includes('lampp')) return wrap(<VscServerProcess color="#FB7A24" />);
   if (n.includes('network')) return wrap(<TbNetwork color="#60D7E4" />);
-  if (n.includes('data model')) return wrap(<MdOutlineTableChart color="#C4EF55" />);
+  if (n.includes('data model')) return wrap(<FiDatabase color="#1a7f37" />);
   if (n.includes('forecast') || n.includes('sarima') || n.includes('xgboost')) return wrap(<TbChartBar color="#60D7E4" />);
-  if (n.includes('claude') || n.includes('opencode') || n.includes('cursor')) return wrap(<VscSymbolMethod color="#C4EF55" />);
+  if (n.includes('claude')) return wrap(<FiTerminal color="#D97706" />);
+  if (n.includes('opencode')) return wrap(<FiBox color="#7C3AED" />);
+  if (n.includes('cursor')) return wrap(<FiCpu color="#0EA5E9" />);
   if (n.includes('hostinger')) return wrap(<SiRailway color="#673DE6" />); // fallback purple
   // generic fallback — first letter in a tiny badge
   return wrap(<span style={{width:'100%',height:'100%',display:'grid',placeItems:'center',background:'color-mix(in srgb, var(--paper) 8%, transparent)',border:'1px solid color-mix(in srgb, var(--paper) 14%, transparent)',fontSize:'0.62em',fontWeight:800,lineHeight:1}}>{name.trim()[0]?.toUpperCase()}</span>);
@@ -572,8 +575,6 @@ function App() {
 
         <TechMarquee paused={marqueePaused} setPaused={setMarqueePaused} />
 
-        <GitHubActivity />
-
         <section className="paper-section about-section" id="about" aria-labelledby="about-title">
           <div className="container">
             <div className="section-heading-row">
@@ -588,7 +589,21 @@ function App() {
               <div className="about-approach"><div className="mini-heading">Approach / 02</div><p>I use an AI-assisted workflow (OpenCode for codebase analysis, Claude Code and OpenCode for implementation) to move fast without cutting corners. I also tinker with hardware, run Linux (Hyprland, Omarchy), and wire up Arduinos and Raspberry Pis.</p></div>
               <StatusPanel />
             </div>
-             <div id="skills" className="skills-block"><div className="mini-heading">Stack inventory / 08 groups</div><div className="skills-grid">{skillGroups.map((group) => <SkillGroup key={group.label} label={group.label} items={group.items} />)}</div></div>
+          </div>
+        </section>
+
+        <GitHubActivity />
+
+        <section className="paper-section stack-section" id="skills" aria-labelledby="skills-title">
+          <div className="container">
+            <div className="section-heading-row">
+              <div><h2 id="skills-title">Stack<br /><em>inventory</em></h2></div>
+              <div className="heading-side">
+                <p className="section-label"><span className="label-dot" aria-hidden="true" />08 groups</p>
+                <p className="section-subheading">Tools in the field</p>
+              </div>
+            </div>
+            <div className="skills-grid">{skillGroups.map((group) => <SkillGroup key={group.label} label={group.label} items={group.items} />)}</div>
           </div>
         </section>
 
