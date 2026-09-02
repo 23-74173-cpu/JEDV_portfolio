@@ -146,6 +146,7 @@ function App() {
   const [expandedProjects, setExpandedProjects] = useState<string[]>(['hilom-ehr']);
   const [marqueePaused, setMarqueePaused] = useState(false);
   const [resumeState, setResumeState] = useState<'idle' | 'preparing' | 'saved'>('idle');
+  const [hasOpenedPalette, setHasOpenedPalette] = useState(false);
   const [reducedMotion, setReducedMotion] = useState(false);
   const [booting, setBooting] = useState(true);
   const [typedRole, setTypedRole] = useState('');
@@ -410,6 +411,7 @@ function App() {
     if (paletteOpen) {
       setPaletteQuery('');
       setSelectedCommand(0);
+      setHasOpenedPalette(true);
       window.setTimeout(() => paletteInputRef.current?.focus(), 40);
     }
   }, [paletteOpen]);
@@ -597,10 +599,10 @@ function App() {
               <p className="hero-index">7 / SYSTEMS SHIPPED <span>·</span> 5 / CLIENTS SERVED</p>
               <h1 id="hero-title">John Eduard<br /><em>De Villa</em></h1>
               <div className="hero-role"><span className="typewriter" aria-label="Full-stack Developer"><span aria-hidden="true">{typedRole}</span><span className="type-caret" aria-hidden="true" /></span><span className="hero-location">Nasugbu, Batangas, Philippines</span></div>
-              <p className="hero-intro">From EHR schema design to IoT sensor pipelines. I build production systems for real clients while finishing my degree.</p>
+              <p className="hero-intro">7 systems shipped for 5 clients — HILOM EHR now encrypts 28 tables with AES-256-GCM for a live medical center. From auth workflows to offline poultry sensors, I own the stack solo, end-to-end, while finishing my BSIT.</p>
               <div className="hero-actions">
                 <button className="button button-primary" onClick={() => scrollToSection('projects', 'Projects')}>See production work <ArrowUpRight /></button>
-                <button className="button button-console" onClick={() => setPaletteOpen(true)}><span className="button-prompt">$</span> Open command palette <kbd>⌘K</kbd></button>
+                <button className={`button button-console ${!hasOpenedPalette ? 'palette-hint' : ''}`} onClick={() => setPaletteOpen(true)}><span className="button-prompt">$</span> Open command palette <kbd>⌘K</kbd></button>
               </div>
             </div>
             <HeroReadout />
@@ -621,7 +623,7 @@ function App() {
             </div>
             <div className="about-layout">
               <div className="about-statement"><p>I build real, deployed systems for actual clients, not just class exercises. From EHR schema design to IoT sensor pipelines, I work solo, end-to-end, delivering production software while finishing my degree.</p><span className="margin-note">FIELD NOTE 001</span></div>
-              <div className="about-approach"><div className="mini-heading">Approach / 02</div><p>I use an AI-assisted workflow (OpenCode for codebase analysis, Claude Code and OpenCode for implementation) to move fast without cutting corners. I also tinker with hardware, run Linux (Hyprland, Omarchy), and wire up Arduinos and Raspberry Pis.</p></div>
+              <div className="about-approach"><div className="mini-heading">Approach / 02 — solo, end-to-end</div><p>I scope, schema-design, build, and ship myself. To move fast without cutting corners I run an AI-assisted loop — <strong>Opencode</strong> for codebase analysis, <strong>Claude Code</strong> for implementation, <strong>Cursor</strong> for review — then verify manually. Same hands wire the hardware: Linux Hyprland/Omarchy, Raspberry Pi 5 + Arduino (DHT22, IR break-beam) for the farm.</p></div>
               <StatusPanel />
             </div>
           </div>
@@ -734,7 +736,8 @@ function SkillGroup({ label, items }: { label: string; items: string[] }) {
 
 function ProjectCard({ project, expanded, toggleProject, inspectProject }: { project: Project; expanded: boolean; toggleProject: (id: string) => void; inspectProject: (project: Project) => void }) {
   const detailId = `${project.id}-details`;
-  return <article className={`project-card project-${project.status.toLowerCase().replace(' ', '-')}`} id={project.id}><div className="project-card-content"><div className="project-number" aria-hidden="true">{project.number}</div><div className="project-main"><div className="project-topline"><StatusBadge status={project.status} /><span className="project-repo">Repo coming soon</span></div><h3>{project.title}</h3><p className="project-subtitle">{project.subtitle}</p><div className="project-impact"><span>Impact</span><p>{project.impact}</p></div><div className="stack-row" aria-label={`${project.title} technology stack`}>{project.stack.map((item) => <span key={item}>{item}</span>)}</div></div><div className="project-controls"><button className="details-button" aria-expanded={expanded} aria-controls={detailId} onClick={() => toggleProject(project.id)}>{expanded ? 'Close case file' : 'Read case file'}<span className="plus-icon" aria-hidden="true">{expanded ? '−' : '+'}</span></button><button className="project-jump" onClick={() => inspectProject(project)} aria-label={`Inspect ${project.title}`}>Inspect <ArrowUpRight /></button></div>{expanded && <div className="project-details" id={detailId}><div className="details-label">CASE FILE / BUILD NOTES</div><ul>{project.details.map((detail) => <li key={detail}>{detail}</li>)}</ul></div>}</div></article>;
+  const isHilom = project.id === 'hilom-ehr';
+  return <article className={`project-card project-${project.status.toLowerCase().replace(' ', '-')}`} id={project.id}><div className="project-card-content"><div className="project-number" aria-hidden="true">{project.number}</div><div className="project-main"><div className="project-topline"><StatusBadge status={project.status} /><span className="project-repo">{isHilom ? <a href="#contact" onClick={(e) => { e.preventDefault(); document.getElementById('contact')?.scrollIntoView({ behavior: 'smooth' }); }} style={{ color: 'inherit', textDecoration: 'underline', textUnderlineOffset: '3px', textDecorationColor: 'var(--orange)' }}>Private repo · Case file on request ↗</a> : project.status === 'Shipped' ? 'Shipped · Private repo' : 'Private repo'}</span></div><h3>{project.title}</h3><p className="project-subtitle">{project.subtitle}</p><div className="project-impact"><span>Impact</span><p>{project.impact}</p></div><div className="stack-row" aria-label={`${project.title} technology stack`}>{project.stack.map((item) => <span key={item}>{item}</span>)}</div></div><div className="project-controls"><button className="details-button" aria-expanded={expanded} aria-controls={detailId} onClick={() => toggleProject(project.id)}>{expanded ? 'Close case file' : 'Read case file'}<span className="plus-icon" aria-hidden="true">{expanded ? '−' : '+'}</span></button><button className="project-jump" onClick={() => inspectProject(project)} aria-label={`Inspect ${project.title}`}>Inspect <ArrowUpRight /></button></div>{expanded && <div className="project-details" id={detailId}><div className="details-label">CASE FILE / BUILD NOTES</div><ul>{project.details.map((detail) => <li key={detail}>{detail}</li>)}</ul></div>}</div></article>;
 }
 
 function TimelineSection({ scrollToSection, sectionRef, viewportRef, trackRef }: { scrollToSection: (id: string, label: string) => void; sectionRef: RefObject<HTMLElement | null>; viewportRef: RefObject<HTMLDivElement | null>; trackRef: RefObject<HTMLDivElement | null> }) {
