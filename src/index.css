@@ -255,6 +255,11 @@ h1 em, h2 em { color: var(--orange); font-family: var(--display); font-weight: 4
   .timeline-section { height: auto; min-height: 0; overflow: visible; padding: 112px 0 105px; }
 }
 
+.timeline-track { position: relative; }
+.timeline-track::before { position: absolute; content: ""; top: 0; right: 0; left: 0; z-index: 0; height: 1px; background: var(--paper-line); }
+.timeline-entry { z-index: 1; border-top: 0; }
+.timeline-entry::after { top: 0; z-index: 2; transform: translateY(-50%); }
+
 @media (min-width: 1024px) and (hover: hover) and (pointer: fine) {
   .site-header { z-index: 50; }
   .projects-scroll-stage { position: relative; }
