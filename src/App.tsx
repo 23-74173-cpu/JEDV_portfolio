@@ -5,6 +5,39 @@ import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { certifications, email, projects, skillGroups, technologies, timeline, type Project, type ProjectStatus } from './data';
 import { resumeText } from './resume';
 // import SpinWheelSection from './SpinWheel'; // temporarily disabled — uncomment to re-enable wheel
+import {
+  SiJavascript,
+  SiTypescript,
+  SiPython,
+  SiHtml5,
+  SiCss,
+  SiReact,
+  SiNextdotjs,
+  SiTailwindcss,
+  SiNodedotjs,
+  SiLaravel,
+  SiCodeigniter,
+  SiJsonwebtokens,
+  SiMysql,
+  SiMariadb,
+  SiSqlite,
+  SiDocker,
+  SiGit,
+  SiGithub,
+  SiRailway,
+  SiVercel,
+  SiLinux,
+  SiFigma,
+  SiOpenjdk,
+  SiPhp,
+  SiExpo,
+  SiCplusplus,
+  SiSharp,
+} from 'react-icons/si';
+import { FaWindows } from 'react-icons/fa';
+import { VscSymbolMethod, VscServerProcess } from 'react-icons/vsc';
+import { TbChartBar, TbLock, TbNetwork } from 'react-icons/tb';
+import { MdOutlineTableChart, MdOutlineSecurity } from 'react-icons/md';
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -40,6 +73,54 @@ function SocialIcon({ network }: { network: 'github' | 'facebook' | 'linkedin' }
 
 function FigmaIcon() {
   return <svg className="figma-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="#f24e1e" d="M7 2h5v6H7a3 3 0 1 1 0-6Z" /><path fill="#ff7262" d="M12 2h3a3 3 0 1 1 0 6h-3V2Z" /><path fill="#a259ff" d="M7 8h5v6H7a3 3 0 1 1 0-6Z" /><path fill="#1abcfe" d="M12 8h3a3 3 0 1 1 0 6h-3V8Z" /><path fill="#0acf83" d="M7 14h5v3a3 3 0 1 1-5-3Z" /></svg>;
+}
+
+function SkillIcon({ name }: { name: string }) {
+  const n = name.toLowerCase();
+  // helper to wrap icon with consistent size/color
+  const wrap = (icon: ReactNode) => <span className="skill-icon" aria-hidden="true">{icon}</span>;
+  if (n.includes('javascript') && !n.includes('typescript')) return wrap(<SiJavascript color="#F7DF1E" />);
+  if (n.includes('typescript')) return wrap(<SiTypescript color="#3178C6" />);
+  if (n === 'java' || n.includes('java swing')) return wrap(<SiOpenjdk color="#5382A1" />);
+  if (n === 'c#' || n.includes('c#')) return wrap(<SiSharp color="#239120" />);
+  if (n.includes('c++')) return wrap(<SiCplusplus color="#00599C" />);
+  if (n.includes('python')) return wrap(<SiPython color="#3776AB" />);
+  if (n === 'php') return wrap(<SiPhp color="#777BB4" />);
+  if (n.includes('html')) return wrap(<SiHtml5 color="#E34F26" />);
+  if (n.includes('css') && n.includes('tailwind')) return wrap(<SiTailwindcss color="#06B6D4" />);
+  if (n.includes('css')) return wrap(<SiCss color="#1572B6" />);
+  if (n.includes('react native')) return wrap(<SiExpo color="#000020" />);
+  if (n.includes('react')) return wrap(<SiReact color="#61DAFB" />);
+  if (n.includes('next.js')) return wrap(<SiNextdotjs color="currentColor" />);
+  if (n.includes('node')) return wrap(<SiNodedotjs color="#339933" />);
+  if (n.includes('laravel')) return wrap(<SiLaravel color="#FF2D20" />);
+  if (n.includes('codeigniter')) return wrap(<SiCodeigniter color="#EF4223" />);
+  if (n.includes('jwt')) return wrap(<SiJsonwebtokens color="#000000" />);
+  if (n.includes('bcrypt')) return wrap(<TbLock color="#FF6B3D" />);
+  if (n === 'mysql') return wrap(<SiMysql color="#4479A1" />);
+  if (n.includes('mariadb')) return wrap(<SiMariadb color="#003545" />);
+  if (n.includes('sqlite')) return wrap(<SiSqlite color="#003B57" />);
+  if (n.includes('aes') || n.includes('encryption')) return wrap(<MdOutlineSecurity color="#60D7E4" />);
+  if (n.includes('docker')) return wrap(<SiDocker color="#2496ED" />);
+  if (n === 'git / github') return wrap(<span style={{display:'inline-flex',gap:'2px'}}><SiGit color="#F05032" /><SiGithub color="currentColor" /></span>);
+  if (n.includes('github')) return wrap(<SiGithub color="currentColor" />);
+  if (n.includes('git')) return wrap(<SiGit color="#F05032" />);
+  if (n.includes('railway')) return wrap(<SiRailway color="currentColor" />);
+  if (n.includes('vercel')) return wrap(<SiVercel color="currentColor" />);
+  if (n.includes('linux')) return wrap(<SiLinux color="#FCC624" />);
+  if (n.includes('windows')) return wrap(<FaWindows color="#00A4EF" />);
+  if (n.includes('figma')) return wrap(<SiFigma color="#F24E1E" />);
+  if (n.includes('power bi')) return wrap(<TbChartBar color="#F2C811" />);
+  if (n.includes('tableau')) return wrap(<TbChartBar color="#E97627" />);
+  if (n.includes('docker')) return wrap(<SiDocker color="#2496ED" />);
+  if (n.includes('xampp') || n.includes('lampp')) return wrap(<VscServerProcess color="#FB7A24" />);
+  if (n.includes('network')) return wrap(<TbNetwork color="#60D7E4" />);
+  if (n.includes('data model')) return wrap(<MdOutlineTableChart color="#C4EF55" />);
+  if (n.includes('forecast') || n.includes('sarima') || n.includes('xgboost')) return wrap(<TbChartBar color="#60D7E4" />);
+  if (n.includes('claude') || n.includes('opencode') || n.includes('cursor')) return wrap(<VscSymbolMethod color="#C4EF55" />);
+  if (n.includes('hostinger')) return wrap(<SiRailway color="#673DE6" />); // fallback purple
+  // generic fallback — first letter in a tiny badge
+  return wrap(<span style={{width:'100%',height:'100%',display:'grid',placeItems:'center',background:'color-mix(in srgb, var(--paper) 8%, transparent)',border:'1px solid color-mix(in srgb, var(--paper) 14%, transparent)',fontSize:'0.62em',fontWeight:800,lineHeight:1}}>{name.trim()[0]?.toUpperCase()}</span>);
 }
 
 function SectionLabel({ children }: { children: ReactNode }) {
@@ -477,7 +558,7 @@ function App() {
               <div className="hero-kicker"><span className="live-signal" />Available for new systems <span className="kicker-rule" /> 09.2026</div>
               <p className="hero-index">7 / SYSTEMS SHIPPED <span>·</span> 5 / CLIENTS SERVED</p>
               <h1 id="hero-title">John Eduard<br /><em>De Villa</em></h1>
-              <p className="hero-role"><span className="typewriter" aria-label="Full-stack Developer"><span aria-hidden="true">{typedRole}</span><span className="type-caret" aria-hidden="true" /></span> <span>·</span> Batangas, Philippines</p>
+              <div className="hero-role"><span className="typewriter" aria-label="Full-stack Developer"><span aria-hidden="true">{typedRole}</span><span className="type-caret" aria-hidden="true" /></span><span className="hero-location">Nasugbu, Batangas, Philippines</span></div>
               <p className="hero-intro">From EHR schema design to IoT sensor pipelines. I build production systems for real clients while finishing my degree.</p>
               <div className="hero-actions">
                 <button className="button button-primary" onClick={() => scrollToSection('projects', 'Projects')}>See production work <ArrowUpRight /></button>
@@ -490,6 +571,8 @@ function App() {
         </section>
 
         <TechMarquee paused={marqueePaused} setPaused={setMarqueePaused} />
+
+        <GitHubActivity />
 
         <section className="paper-section about-section" id="about" aria-labelledby="about-title">
           <div className="container">
@@ -515,20 +598,7 @@ function App() {
               <div className="section-heading-row projects-heading"><div><h2 id="projects-title">Production systems<br /><em>I’ve built</em></h2></div><div className="heading-side"><SectionLabel>Featured Projects</SectionLabel><p className="section-subheading">Evidence over adjectives.<br />Open a case file.</p></div></div>
               <div className="filter-bar" role="tablist" aria-label="Filter projects by status">{filters.map((option) => <button key={option} className={`filter-button ${filter === option ? 'is-selected' : ''}`} role="tab" aria-selected={filter === option} onClick={() => setFilter(option)}><span className="filter-count">{option === 'All' ? projects.length : projects.filter((project) => project.status === option).length}</span>{option}</button>)}</div>
               </div><div className="projects-scroll-stage" ref={projectsStageRef}><div className="project-list project-deck" ref={projectListRef}>{visibleProjects.map((project) => <ProjectCard key={project.id} project={project} expanded={expandedProjects.includes(project.id)} toggleProject={toggleProject} inspectProject={openInspection} />)}</div></div>
-              <div className={`projects-next-wrap ${currentProjectIndex >= visibleProjects.length - 1 ? 'is-end' : ''}`} aria-hidden={visibleProjects.length <= 1}>
-                <button
-                  className="projects-next-btn"
-                  onClick={handleNextCard}
-                  disabled={currentProjectIndex >= visibleProjects.length - 1}
-                  aria-label={currentProjectIndex >= visibleProjects.length - 1 ? 'End of projects' : `Next project (${currentProjectIndex + 1} of ${visibleProjects.length})`}
-                  title={currentProjectIndex >= visibleProjects.length - 1 ? 'End of stack — scroll to continue' : 'Next card'}
-                >
-                  <span className="projects-next-label">{currentProjectIndex >= visibleProjects.length - 1 ? 'End' : 'Next'}</span>
-                  <span className="projects-next-icon" aria-hidden="true">⌄</span>
-                </button>
-                <span className="projects-next-progress" aria-hidden="true">{String(currentProjectIndex + 1).padStart(2,'0')} / {String(visibleProjects.length).padStart(2,'0')}</span>
-              </div>
-            </div>
+</div>
         </section>
 
         <TimelineSection scrollToSection={scrollToSection} sectionRef={timelineSectionRef} viewportRef={timelineViewportRef} trackRef={timelineTrackRef} />
@@ -536,7 +606,7 @@ function App() {
         {/* <SpinWheelSection /> — temporarily disabled */}
 
         <section className="contact-section" id="contact" aria-labelledby="contact-title">
-          <div className="container contact-layout"><div><SectionLabel>Contact</SectionLabel><h2 id="contact-title">Let’s talk about<br /><em>your system</em></h2></div><div className="contact-copy section-scroll-reveal"><p>I&apos;m available for new projects, freelance work, and collaborations. Email works best. I reply within 24 hours.</p><button className="email-button" onClick={copyEmail} aria-label={`Copy ${email}`}><span className="email-prefix">mailto://</span>{email}<ArrowUpRight /></button><div className="contact-meta"><span>Batangas, Philippines</span><div className="social-row" aria-label="Social links"><a className="social-link" href="https://github.com/23-74173-cpu" target="_blank" rel="noreferrer"><SocialIcon network="github" />GitHub</a><a className="social-link" href="https://web.facebook.com/joed.devilla/" target="_blank" rel="noreferrer"><SocialIcon network="facebook" />Facebook</a><a className="social-link" href="https://www.linkedin.com/in/john-eduard-de-villa-78689935a/" target="_blank" rel="noreferrer"><SocialIcon network="linkedin" />LinkedIn</a></div></div><button className="resume-button" onClick={downloadResume}>{resumeState === 'preparing' ? 'Preparing…' : resumeState === 'saved' ? '✓ Saved' : 'Download Résumé'}<ArrowUpRight /></button></div></div>
+          <div className="container contact-layout"><div><SectionLabel>Contact</SectionLabel><h2 id="contact-title">Let’s talk about<br /><em>your system</em></h2></div><div className="contact-copy section-scroll-reveal"><p>I&apos;m available for new projects, freelance work, and collaborations. Email works best. I reply within 24 hours.</p><button className="email-button" onClick={copyEmail} aria-label={`Copy ${email}`}><span className="email-prefix">mailto://</span>{email}<ArrowUpRight /></button><div className="contact-meta"><span>Nasugbu, Batangas, Philippines</span><div className="social-row" aria-label="Social links"><a className="social-link" href="https://github.com/23-74173-cpu" target="_blank" rel="noreferrer"><SocialIcon network="github" />GitHub</a><a className="social-link" href="https://web.facebook.com/joed.devilla/" target="_blank" rel="noreferrer"><SocialIcon network="facebook" />Facebook</a><a className="social-link" href="https://www.linkedin.com/in/john-eduard-de-villa-78689935a/" target="_blank" rel="noreferrer"><SocialIcon network="linkedin" />LinkedIn</a></div></div><button className="resume-button" onClick={downloadResume}>{resumeState === 'preparing' ? 'Preparing…' : resumeState === 'saved' ? '✓ Saved' : 'Download Résumé'}<ArrowUpRight /></button></div></div>
         </section>
       </main>
 
@@ -566,12 +636,50 @@ function TechMarquee({ paused, setPaused }: { paused: boolean; setPaused: (pause
   return <section className="marquee-section" aria-label="Technology stack"><div className="marquee-header"><span>TOOLS IN THE FIELD</span><button className="marquee-toggle" onClick={() => setPaused(!paused)} aria-pressed={paused}>{paused ? 'Play strip' : 'Pause strip'} <span aria-hidden="true">{paused ? '▶' : 'Ⅱ'}</span></button></div><div className={`marquee-viewport ${paused ? 'is-paused' : ''}`}><div className="marquee-track">{technologies.map((technology) => <span className="tech-item" key={technology}><span className="tech-mark" aria-hidden="true">+</span>{technology}</span>)}{technologies.map((technology) => <span className="tech-item" key={`${technology}-duplicate`} aria-hidden="true"><span className="tech-mark" aria-hidden="true">+</span>{technology}</span>)}</div></div></section>;
 }
 
+function GitHubActivity() {
+  return (
+    <section className="github-section" aria-labelledby="github-title">
+      <div className="container">
+        <div className="section-heading-row">
+          <div><h2 id="github-title">Commit<br /><em>activity</em></h2></div>
+          <div className="heading-side">
+            <p className="section-label"><span className="label-dot" aria-hidden="true" />GitHub</p>
+            <p className="section-subheading">Daily pushes — live from Git</p>
+          </div>
+        </div>
+        <div className="github-grid-wrap">
+          <div className="github-chart-frame">
+            <div className="github-chart-header">
+              <span className="palette-lights" aria-hidden="true"><i /><i /><i /></span>
+              <span>23-74173-cpu / contributions</span>
+              <a href="https://github.com/23-74173-cpu" target="_blank" rel="noreferrer">View profile ↗</a>
+            </div>
+            <a href="https://github.com/23-74173-cpu" target="_blank" rel="noreferrer" className="github-chart-link">
+              <img
+                src="https://ghchart.rshah.org/23-74173-cpu"
+                alt="GitHub contributions chart for 23-74173-cpu"
+                loading="lazy"
+                className="github-chart-img"
+              />
+            </a>
+          </div>
+          <div className="github-meta">
+            <span>github.com/23-74173-cpu</span>
+            <span className="github-meta-dot" aria-hidden="true" />
+            <span>updated daily via ghchart</span>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function StatusPanel() {
-  return <div className="status-panel"><div className="mini-heading">Current status / 03</div><dl><div><dt>Education</dt><dd>4th-year BSIT, Business Analytics<br />Batangas State University, ARASOF Nasugbu</dd></div><div><dt>Location</dt><dd>Batangas, Philippines</dd></div><div><dt>Workflow</dt><dd>Solo, end-to-end, AI-assisted</dd></div></dl></div>;
+  return <div className="status-panel"><div className="mini-heading">Current status / 03</div><dl><div><dt>Education</dt><dd>4th-year BSIT, Business Analytics<br />Batangas State University, ARASOF Nasugbu</dd></div><div><dt>Location</dt><dd>Nasugbu, Batangas, Philippines</dd></div><div><dt>Workflow</dt><dd>Solo, end-to-end, AI-assisted</dd></div></dl></div>;
 }
 
 function SkillGroup({ label, items }: { label: string; items: string[] }) {
-  return <div className="skill-group"><h3>{label}</h3><div className="pill-list">{items.map((item) => <span className="skill-pill" key={item}>{item === 'Figma' && <FigmaIcon />}{item}</span>)}</div></div>;
+  return <div className="skill-group"><h3>{label}</h3><div className="pill-list">{items.map((item) => <span className="skill-pill" key={item}><SkillIcon name={item} />{item}</span>)}</div></div>;
 }
 
 function ProjectCard({ project, expanded, toggleProject, inspectProject }: { project: Project; expanded: boolean; toggleProject: (id: string) => void; inspectProject: (project: Project) => void }) {

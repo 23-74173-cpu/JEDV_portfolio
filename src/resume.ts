@@ -3,7 +3,7 @@ import { email, projects, skillGroups } from './data';
 export const resumeText = [
   'JOHN EDUARD DE VILLA',
   'Full-stack Developer',
-  'Batangas, Philippines',
+  'Nasugbu, Batangas, Philippines',
   email,
   '',
   'PROFILE',
