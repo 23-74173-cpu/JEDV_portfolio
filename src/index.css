@@ -260,6 +260,24 @@ h1 em, h2 em { color: var(--orange); font-family: var(--display); font-weight: 4
 .timeline-entry { z-index: 1; border-top: 0; }
 .timeline-entry::after { top: 0; z-index: 2; transform: translateY(-50%); }
 
+.timeline-entry { flex-basis: clamp(280px, 30vw, 380px); min-height: 370px; margin-right: clamp(30px, 3.5vw, 48px); }
+.timeline-entry::after { width: clamp(11px, 1vw, 14px); height: clamp(11px, 1vw, 14px); }
+.timeline-year { margin-bottom: 23px; font-size: clamp(.8rem, 1.05vw, 1.05rem); }
+.timeline-badge { margin-bottom: 21px; font-size: clamp(.62rem, .78vw, .78rem); }
+.timeline-entry h3 { max-width: 270px; margin-bottom: 14px; font-size: clamp(1.65rem, 2.35vw, 2.45rem); }
+.timeline-role { font-size: clamp(.66rem, .74vw, .8rem); line-height: 1.55; }
+.timeline-entry-body > p:last-child { max-width: 290px; font-size: clamp(.88rem, .95vw, 1.03rem); line-height: 1.55; }
+
+@media (max-width: 700px) {
+  .timeline-entry { flex-basis: clamp(270px, 79vw, 320px); min-height: 360px; margin-right: clamp(28px, 8vw, 38px); }
+  .timeline-entry::after { width: 11px; height: 11px; }
+  .timeline-year { margin-bottom: 20px; font-size: .78rem; }
+  .timeline-badge { margin-bottom: 18px; font-size: .62rem; }
+  .timeline-entry h3 { margin-bottom: 12px; font-size: clamp(1.55rem, 8vw, 2rem); }
+  .timeline-role { font-size: .65rem; line-height: 1.5; }
+  .timeline-entry-body > p:last-child { max-width: 260px; font-size: .88rem; line-height: 1.5; }
+}
+
 @media (min-width: 1024px) and (hover: hover) and (pointer: fine) {
   .site-header { z-index: 50; }
   .projects-scroll-stage { position: relative; }
