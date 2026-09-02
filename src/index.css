@@ -246,6 +246,16 @@ h1 em, h2 em { color: var(--orange); font-family: var(--display); font-weight: 4
   .timeline-viewport { flex: 1 1 auto; min-height: 0; }
   .timeline-entry:nth-child(even) { padding-top: 54px; }
   .timeline-entry:nth-child(odd) { padding-top: 20px; }
+  .projects-pin-frame { position: relative; }
+  .projects-next-wrap { position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; z-index: 35; background: color-mix(in srgb, var(--ink) 88%, transparent); border: 1px solid color-mix(in srgb, var(--paper) 14%, transparent); padding: 6px 10px 6px 12px; backdrop-filter: blur(10px); box-shadow: 0 4px 16px rgba(0,0,0,0.35); }
+  .projects-next-btn { display: inline-flex; align-items: center; gap: 8px; padding: 10px 14px; border: 1px solid color-mix(in srgb, var(--paper) 18%, transparent); background: var(--ink-soft); color: var(--paper); font-family: var(--mono); font-size: 0.68rem; letter-spacing: 0.06em; text-transform: uppercase; min-height: 44px; min-width: 72px; justify-content: center; cursor: pointer; transition: border-color 0.2s, color 0.2s, transform 0.2s, opacity 0.2s; }
+  .projects-next-btn:hover:not(:disabled) { border-color: var(--orange); color: var(--orange); transform: translateY(-1px); }
+  .projects-next-btn:disabled { opacity: 0.38; cursor: not-allowed; }
+  .projects-next-icon { font-size: 1.35rem; line-height: 0.7; transform: translateY(-1px); transition: transform 0.2s; display: inline-block; }
+  .projects-next-btn:hover:not(:disabled) .projects-next-icon { transform: translateY(2px); }
+  .projects-next-progress { font-family: var(--mono); font-size: 0.62rem; color: var(--muted-ink); letter-spacing: 0.06em; white-space: nowrap; }
+  .projects-next-wrap.is-end { opacity: 0.55; }
+  .projects-next-wrap.is-end .projects-next-btn { border-style: dashed; }
 }
 
 @media (min-width: 701px) and (hover: none), (min-width: 701px) and (pointer: coarse) {
@@ -257,6 +267,21 @@ h1 em, h2 em { color: var(--orange); font-family: var(--display); font-weight: 4
   .project-deck { height: auto; }
   .project-deck .project-card { position: relative; inset: auto; width: auto; height: auto; margin: 0 0 10px; }
   .timeline-section { height: auto; min-height: 0; overflow: visible; padding: 112px 0 105px; }
+  .projects-next-wrap { position: sticky; bottom: 12px; left: auto; transform: none; margin: 16px auto 0; justify-content: center; width: fit-content; display: flex; align-items: center; gap: 10px; background: color-mix(in srgb, var(--ink) 88%, transparent); border: 1px solid color-mix(in srgb, var(--paper) 14%, transparent); padding: 6px 10px 6px 12px; backdrop-filter: blur(10px); box-shadow: 0 4px 16px rgba(0,0,0,0.35); z-index: 35; }
+  .projects-next-btn { display: inline-flex; align-items: center; gap: 8px; padding: 10px 14px; border: 1px solid color-mix(in srgb, var(--paper) 18%, transparent); background: var(--ink-soft); color: var(--paper); font-family: var(--mono); font-size: 0.68rem; letter-spacing: 0.06em; text-transform: uppercase; min-height: 44px; min-width: 72px; justify-content: center; cursor: pointer; transition: border-color 0.2s, color 0.2s, transform 0.2s, opacity 0.2s; }
+  .projects-next-btn:hover:not(:disabled) { border-color: var(--orange); color: var(--orange); transform: translateY(-1px); }
+  .projects-next-btn:disabled { opacity: 0.38; cursor: not-allowed; }
+  .projects-next-icon { font-size: 1.35rem; line-height: 0.7; transform: translateY(-1px); transition: transform 0.2s; display: inline-block; }
+  .projects-next-progress { font-family: var(--mono); font-size: 0.62rem; color: var(--muted-ink); letter-spacing: 0.06em; white-space: nowrap; }
+}
+
+@media (max-width: 700px) {
+  .projects-next-wrap { position: sticky; bottom: 12px; left: auto; transform: none; margin: 16px auto 0; justify-content: center; width: fit-content; display: flex; align-items: center; gap: 10px; background: color-mix(in srgb, var(--ink) 88%, transparent); border: 1px solid color-mix(in srgb, var(--paper) 14%, transparent); padding: 6px 10px 6px 12px; backdrop-filter: blur(10px); box-shadow: 0 4px 16px rgba(0,0,0,0.35); z-index: 35; }
+  .projects-next-btn { display: inline-flex; align-items: center; gap: 8px; padding: 10px 14px; border: 1px solid color-mix(in srgb, var(--paper) 18%, transparent); background: var(--ink-soft); color: var(--paper); font-family: var(--mono); font-size: 0.68rem; letter-spacing: 0.06em; text-transform: uppercase; min-height: 44px; min-width: 72px; justify-content: center; cursor: pointer; transition: border-color 0.2s, color 0.2s, transform 0.2s, opacity 0.2s; }
+  .projects-next-btn:hover:not(:disabled) { border-color: var(--orange); color: var(--orange); transform: translateY(-1px); }
+  .projects-next-btn:disabled { opacity: 0.38; cursor: not-allowed; }
+  .projects-next-icon { font-size: 1.35rem; line-height: 0.7; transform: translateY(-1px); transition: transform 0.2s; display: inline-block; }
+  .projects-next-progress { font-family: var(--mono); font-size: 0.62rem; color: var(--muted-ink); letter-spacing: 0.06em; white-space: nowrap; }
 }
 
 .timeline-track { position: relative; }

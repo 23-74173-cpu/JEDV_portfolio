@@ -76,6 +76,8 @@ function App() {
   const timelineTrackRef = useRef<HTMLDivElement>(null);
   const toastId = useRef(0);
   const visibleProjects = projects.filter((project) => filter === 'All' || project.status === filter);
+  const [currentProjectIndex, setCurrentProjectIndex] = useState(0);
+  const projectsProgressRef = useRef(0);
 
   const notify = (message: string) => {
     const id = toastId.current + 1;
@@ -144,6 +146,82 @@ function App() {
     setInspectionProject(project);
     setPaletteOpen(false);
   };
+
+  const handleNextCard = () => {
+    const n = visibleProjects.length;
+    if (n <= 1) return;
+    const st = ScrollTrigger.getById('projects-reveal') as unknown as { progress: number; start: number; end: number } | null;
+    if (st && typeof st.start === 'number' && typeof st.end === 'number') {
+      const progress = st.progress;
+      const currentIdx = Math.round(progress * (n - 1));
+      const nextIdx = Math.min(currentIdx + 1, n - 1);
+      if (nextIdx === currentIdx && progress >= 0.99) return;
+      const targetProgress = nextIdx / (n - 1);
+      const targetScroll = st.start + targetProgress * (st.end - st.start);
+      window.scrollTo({ top: targetScroll, behavior: 'auto' });
+      notify(`Card ${nextIdx + 1} of ${n}`);
+    } else {
+      // Fallback for mobile / no pin (stacked cards) — find currently centered card via DOM
+      const cards = visibleProjects.map((p) => document.getElementById(p.id)).filter(Boolean) as HTMLElement[];
+      let currentIdx = currentProjectIndex;
+      // Try to detect which card is most in view
+      let bestIdx = -1;
+      let bestDist = Infinity;
+      const viewportCenter = window.innerHeight * 0.5;
+      for (let i = 0; i < cards.length; i++) {
+        const rect = cards[i].getBoundingClientRect();
+        const dist = Math.abs(rect.top + rect.height / 2 - viewportCenter);
+        if (rect.top < window.innerHeight && rect.bottom > 0 && dist < bestDist) {
+          bestDist = dist;
+          bestIdx = i;
+        }
+      }
+      if (bestIdx !== -1) currentIdx = bestIdx;
+      const nextIdx = Math.min(currentIdx + 1, n - 1);
+      if (nextIdx === currentIdx && currentIdx >= n - 1) return;
+      const nextId = visibleProjects[nextIdx]?.id;
+      if (nextId) {
+        document.getElementById(nextId)?.scrollIntoView({ behavior: 'auto', block: 'center' });
+        setCurrentProjectIndex(nextIdx);
+        notify(`Card ${nextIdx + 1} of ${n}`);
+      }
+    }
+  };
+
+  useEffect(() => {
+    setCurrentProjectIndex(0);
+    projectsProgressRef.current = 0;
+  }, [filter, visibleProjects.length]);
+
+  // Keep currentProjectIndex in sync on mobile / non-pinned (stacked) layout
+  useEffect(() => {
+    const st = ScrollTrigger.getById('projects-reveal');
+    if (st) return;
+    const cards = visibleProjects.map((p) => document.getElementById(p.id)).filter(Boolean) as HTMLElement[];
+    if (!cards.length) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        let bestIdx = -1;
+        let bestRatio = 0;
+        for (const entry of entries) {
+          if (entry.isIntersecting && entry.intersectionRatio > bestRatio) {
+            const idx = cards.indexOf(entry.target as HTMLElement);
+            if (idx !== -1) {
+              bestRatio = entry.intersectionRatio;
+              bestIdx = idx;
+            }
+          }
+        }
+        if (bestIdx !== -1 && bestIdx !== projectsProgressRef.current) {
+          projectsProgressRef.current = bestIdx;
+          setCurrentProjectIndex(bestIdx);
+        }
+      },
+      { rootMargin: '-35% 0px -35% 0px', threshold: [0, 0.25, 0.5, 0.75, 1] }
+    );
+    cards.forEach((c) => observer.observe(c));
+    return () => observer.disconnect();
+  }, [visibleProjects, filter]);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -266,12 +344,19 @@ function App() {
               end: () => `+=${getProjectDistance()}`,
               pin: true,
               pinSpacing: true,
-              scrub: 0.6,
+              scrub: 0.35,
               snap: {
                 snapTo: 1 / Math.max(projectCards.length - 1, 1),
-                duration: { min: 0.22, max: 0.38 },
-                delay: 0.08,
-                ease: 'power2.inOut',
+                duration: { min: 0.12, max: 0.2 },
+                delay: 0,
+                ease: 'power2.out',
+              },
+              onUpdate: (self) => {
+                const idx = Math.round(self.progress * Math.max(projectCards.length - 1, 1));
+                if (projectsProgressRef.current !== idx) {
+                  projectsProgressRef.current = idx;
+                  setCurrentProjectIndex(idx);
+                }
               },
               invalidateOnRefresh: true,
               anticipatePin: 1,
@@ -392,7 +477,7 @@ function App() {
               <div className="hero-kicker"><span className="live-signal" />Available for new systems <span className="kicker-rule" /> 09.2026</div>
               <p className="hero-index">7 / SYSTEMS SHIPPED <span>·</span> 5 / CLIENTS SERVED</p>
               <h1 id="hero-title">John Eduard<br /><em>De Villa</em></h1>
-              <p className="hero-role"><span className="typewriter" aria-label="Full-stack Developer"><span aria-hidden="true">{typedRole}</span><span className="type-caret" aria-hidden="true" /></span> <span>·</span> Nasugbu, Batangas, Philippines</p>
+              <p className="hero-role"><span className="typewriter" aria-label="Full-stack Developer"><span aria-hidden="true">{typedRole}</span><span className="type-caret" aria-hidden="true" /></span> <span>·</span> Batangas, Philippines</p>
               <p className="hero-intro">From EHR schema design to IoT sensor pipelines. I build production systems for real clients while finishing my degree.</p>
               <div className="hero-actions">
                 <button className="button button-primary" onClick={() => scrollToSection('projects', 'Projects')}>See production work <ArrowUpRight /></button>
@@ -426,10 +511,23 @@ function App() {
 
         <section ref={projectsSectionRef} className="ink-section projects-section" id="projects" aria-labelledby="projects-title">
             <div ref={projectsFrameRef} className="container projects-pin-frame">
-             <div className="projects-intro">
+              <div className="projects-intro">
               <div className="section-heading-row projects-heading"><div><h2 id="projects-title">Production systems<br /><em>I’ve built</em></h2></div><div className="heading-side"><SectionLabel>Featured Projects</SectionLabel><p className="section-subheading">Evidence over adjectives.<br />Open a case file.</p></div></div>
               <div className="filter-bar" role="tablist" aria-label="Filter projects by status">{filters.map((option) => <button key={option} className={`filter-button ${filter === option ? 'is-selected' : ''}`} role="tab" aria-selected={filter === option} onClick={() => setFilter(option)}><span className="filter-count">{option === 'All' ? projects.length : projects.filter((project) => project.status === option).length}</span>{option}</button>)}</div>
               </div><div className="projects-scroll-stage" ref={projectsStageRef}><div className="project-list project-deck" ref={projectListRef}>{visibleProjects.map((project) => <ProjectCard key={project.id} project={project} expanded={expandedProjects.includes(project.id)} toggleProject={toggleProject} inspectProject={openInspection} />)}</div></div>
+              <div className={`projects-next-wrap ${currentProjectIndex >= visibleProjects.length - 1 ? 'is-end' : ''}`} aria-hidden={visibleProjects.length <= 1}>
+                <button
+                  className="projects-next-btn"
+                  onClick={handleNextCard}
+                  disabled={currentProjectIndex >= visibleProjects.length - 1}
+                  aria-label={currentProjectIndex >= visibleProjects.length - 1 ? 'End of projects' : `Next project (${currentProjectIndex + 1} of ${visibleProjects.length})`}
+                  title={currentProjectIndex >= visibleProjects.length - 1 ? 'End of stack — scroll to continue' : 'Next card'}
+                >
+                  <span className="projects-next-label">{currentProjectIndex >= visibleProjects.length - 1 ? 'End' : 'Next'}</span>
+                  <span className="projects-next-icon" aria-hidden="true">⌄</span>
+                </button>
+                <span className="projects-next-progress" aria-hidden="true">{String(currentProjectIndex + 1).padStart(2,'0')} / {String(visibleProjects.length).padStart(2,'0')}</span>
+              </div>
             </div>
         </section>
 
@@ -438,7 +536,7 @@ function App() {
         {/* <SpinWheelSection /> — temporarily disabled */}
 
         <section className="contact-section" id="contact" aria-labelledby="contact-title">
-          <div className="container contact-layout"><div><SectionLabel>Contact</SectionLabel><h2 id="contact-title">Let’s talk about<br /><em>your system</em></h2></div><div className="contact-copy section-scroll-reveal"><p>I&apos;m available for new projects, freelance work, and collaborations. Email works best. I reply within 24 hours.</p><button className="email-button" onClick={copyEmail} aria-label={`Copy ${email}`}><span className="email-prefix">mailto://</span>{email}<ArrowUpRight /></button><div className="contact-meta"><span>Nasugbu, Batangas, Philippines</span><div className="social-row" aria-label="Social links"><a className="social-link" href="https://github.com/23-74173-cpu" target="_blank" rel="noreferrer"><SocialIcon network="github" />GitHub</a><a className="social-link" href="https://web.facebook.com/joed.devilla/" target="_blank" rel="noreferrer"><SocialIcon network="facebook" />Facebook</a><a className="social-link" href="https://www.linkedin.com/in/john-eduard-de-villa-78689935a/" target="_blank" rel="noreferrer"><SocialIcon network="linkedin" />LinkedIn</a></div></div><button className="resume-button" onClick={downloadResume}>{resumeState === 'preparing' ? 'Preparing…' : resumeState === 'saved' ? '✓ Saved' : 'Download Résumé'}<ArrowUpRight /></button></div></div>
+          <div className="container contact-layout"><div><SectionLabel>Contact</SectionLabel><h2 id="contact-title">Let’s talk about<br /><em>your system</em></h2></div><div className="contact-copy section-scroll-reveal"><p>I&apos;m available for new projects, freelance work, and collaborations. Email works best. I reply within 24 hours.</p><button className="email-button" onClick={copyEmail} aria-label={`Copy ${email}`}><span className="email-prefix">mailto://</span>{email}<ArrowUpRight /></button><div className="contact-meta"><span>Batangas, Philippines</span><div className="social-row" aria-label="Social links"><a className="social-link" href="https://github.com/23-74173-cpu" target="_blank" rel="noreferrer"><SocialIcon network="github" />GitHub</a><a className="social-link" href="https://web.facebook.com/joed.devilla/" target="_blank" rel="noreferrer"><SocialIcon network="facebook" />Facebook</a><a className="social-link" href="https://www.linkedin.com/in/john-eduard-de-villa-78689935a/" target="_blank" rel="noreferrer"><SocialIcon network="linkedin" />LinkedIn</a></div></div><button className="resume-button" onClick={downloadResume}>{resumeState === 'preparing' ? 'Preparing…' : resumeState === 'saved' ? '✓ Saved' : 'Download Résumé'}<ArrowUpRight /></button></div></div>
         </section>
       </main>
 
@@ -469,7 +567,7 @@ function TechMarquee({ paused, setPaused }: { paused: boolean; setPaused: (pause
 }
 
 function StatusPanel() {
-  return <div className="status-panel"><div className="mini-heading">Current status / 03</div><dl><div><dt>Education</dt><dd>4th-year BSIT, Business Analytics<br />Batangas State University, ARASOF Nasugbu</dd></div><div><dt>Location</dt><dd>Nasugbu, Batangas, Philippines</dd></div><div><dt>Workflow</dt><dd>Solo, end-to-end, AI-assisted</dd></div></dl></div>;
+  return <div className="status-panel"><div className="mini-heading">Current status / 03</div><dl><div><dt>Education</dt><dd>4th-year BSIT, Business Analytics<br />Batangas State University, ARASOF Nasugbu</dd></div><div><dt>Location</dt><dd>Batangas, Philippines</dd></div><div><dt>Workflow</dt><dd>Solo, end-to-end, AI-assisted</dd></div></dl></div>;
 }
 
 function SkillGroup({ label, items }: { label: string; items: string[] }) {
