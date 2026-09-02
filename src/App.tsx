@@ -171,7 +171,17 @@ function App() {
   };
 
   const scrollToSection = (id: string, label: string, shouldNotify = true) => {
-    document.getElementById(id)?.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth', block: 'start' });
+    const el = document.getElementById(id);
+    if (el) {
+      // Immediate jump — no GSAP scrub / smooth delay
+      const headerOffset = 74;
+      const top = el.getBoundingClientRect().top + window.scrollY - headerOffset + 1;
+      window.scrollTo({ top, behavior: 'auto' });
+      // Force ScrollTrigger to sync immediately instead of scrubbing
+      ScrollTrigger.refresh();
+      // Nudge GSAP ticker to update pins without easing lag
+      gsap.delayedCall(0.02, () => ScrollTrigger.update());
+    }
     setMobileNavOpen(false);
     setPaletteOpen(false);
     if (shouldNotify) notify(`Moved to ${label}`);
@@ -221,7 +231,9 @@ function App() {
   const openProject = (project: Project) => {
     setExpandedProjects((current) => current.includes(project.id) ? current : [...current, project.id]);
     scrollToSection('projects', 'Projects', false);
-    window.setTimeout(() => document.getElementById(project.id)?.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth', block: 'center' }), 80);
+    // immediate — no smooth/scrub lag
+    const el = document.getElementById(project.id);
+    if (el) window.setTimeout(() => el.scrollIntoView({ behavior: 'auto', block: 'center' }), 20);
     setPaletteOpen(false);
     notify(`Opening ${project.title}`);
   };
@@ -323,6 +335,29 @@ function App() {
     const timeout = window.setTimeout(() => setBooting(false), reducedMotion ? 700 : 1250);
     return () => window.clearTimeout(timeout);
   }, [reducedMotion]);
+
+  // Hero intro — runs once right after boot screen lifts, no delay
+  useEffect(() => {
+    if (booting) return;
+    if (reducedMotion) {
+      gsap.set(['.hero-kicker', '.hero-index', '#hero-title', '.hero-role', '.hero-intro', '.hero-actions .button', '.hero-readout', '.hero-footer'], { clearProps: 'all' });
+      return;
+    }
+    const ctx = gsap.context(() => {
+      // ensure starting state is hidden (in case CSS left it visible)
+      gsap.set(['.hero-kicker', '.hero-index', '#hero-title', '.hero-role', '.hero-intro', '.hero-actions .button', '.hero-readout', '.hero-footer'], { autoAlpha: 1 });
+      const tl = gsap.timeline({ defaults: { ease: 'power3.out' } });
+      tl.from('.hero-kicker', { y: 14, autoAlpha: 0, duration: 0.45 }, 0)
+        .from('.hero-index', { y: 14, autoAlpha: 0, duration: 0.45 }, 0.07)
+        .from('#hero-title', { y: 32, autoAlpha: 0, duration: 0.7 }, 0.1)
+        .from('.hero-role', { y: 12, autoAlpha: 0, duration: 0.45 }, 0.28)
+        .from('.hero-intro', { y: 14, autoAlpha: 0, duration: 0.5 }, 0.34)
+        .from('.hero-actions .button', { y: 12, autoAlpha: 0, duration: 0.4, stagger: 0.07 }, 0.42)
+        .from('.hero-readout', { y: 22, autoAlpha: 0, scale: 0.97, duration: 0.6 }, 0.22)
+        .from('.hero-footer', { autoAlpha: 0, duration: 0.35 }, 0.55);
+    });
+    return () => ctx.revert();
+  }, [booting, reducedMotion]);
 
   useEffect(() => {
     const role = 'Full-stack Developer';
