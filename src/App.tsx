@@ -216,6 +216,21 @@ function App() {
   }, [paletteOpen]);
 
   useLayoutEffect(() => {
+    window.history.scrollRestoration = 'manual';
+    const resetPage = () => {
+      const html = document.documentElement;
+      const previousScrollBehavior = html.style.scrollBehavior;
+      html.style.scrollBehavior = 'auto';
+      window.scrollTo(0, 0);
+      html.style.scrollBehavior = previousScrollBehavior;
+      ScrollTrigger.refresh();
+    };
+    resetPage();
+    const resetFrame = window.requestAnimationFrame(resetPage);
+    return () => window.cancelAnimationFrame(resetFrame);
+  }, []);
+
+  useLayoutEffect(() => {
     const timelineViewport = timelineViewportRef.current;
     const timelineTrack = timelineTrackRef.current;
     if (!timelineViewport || !timelineTrack) return undefined;
@@ -257,7 +272,7 @@ function App() {
             },
           });
           projectCards.slice(1).forEach((card, index) => {
-            const position = index * 1.55;
+            const position = 0.35 + index * 1.55;
             const currentContent = projectCardContents[index];
             const nextContent = projectCardContents[index + 1];
             projectTimeline
