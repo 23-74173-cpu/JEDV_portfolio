@@ -1,0 +1,33 @@
+# John Eduard De Villa — Full-Stack Developer Portfolio
+
+> Portfolio of John Eduard De Villa, a full-stack developer in Nasugbu,
+> Batangas, Philippines. 4th-year BSIT (Business Analytics) student shipping
+> production systems for real clients — 7 systems shipped for 5 clients.
+
+## What I build
+
+- HILOM EHR: electronic health records, live pilot for a Nasugbu medical
+  center (28+ tables, JWT auth, AES-256-GCM field-level encryption).
+- LayRate: offline poultry-farm egg-production monitoring on Raspberry Pi 5 +
+  Arduino (capstone, SARIMA/XGBoost forecasting in development).
+- Talent Scout AI: job-matching platform for the Nasugbu job market.
+- HairConnect: AI hairstyle recommendations + barbershop/salon ratings.
+- J&R Photography Studio: booking & scheduling system (live client).
+- Plant Selling & Management System: Java desktop POS & inventory.
+- Library, Grading & Gym Management Systems: commissioned C# desktop apps.
+- Student Portal: grade management with JasperReports academic documents.
+
+## Stack
+
+React, React Native (Expo), Next.js, Node.js, Laravel, CodeIgniter, MySQL,
+MariaDB, SQLite, Docker, Railway, Vercel, Power BI, Tableau.
+
+## Links
+
+- Homepage: https://jedvportfolio.vercel.app/
+- Projects: https://jedvportfolio.vercel.app/#projects
+- Experience: https://jedvportfolio.vercel.app/#experience
+- Certifications: https://jedvportfolio.vercel.app/#certifications
+- Contact: https://jedvportfolio.vercel.app/#contact
+- GitHub: https://github.com/23-74173-cpu
+- Email: johneduarddevilla09@gmail.com

@@ -665,7 +665,7 @@ function App() {
         </section>
       </main>
 
-      <footer className="site-footer"><div className="container footer-content"><span>© 2026 John Eduard De Villa</span><span>Built with React <span className="footer-separator">·</span> Vite <span className="footer-separator">·</span> Tailwind</span><span>JEDV / END OF LOG</span></div></footer>
+      <footer className="site-footer"><div className="container footer-content"><span>© 2026 John Eduard De Villa</span><nav className="footer-nav" aria-label="Footer"><a href="#about">About</a><a href="#projects">Projects</a><a href="#experience">Experience</a><a href="#certifications">Certifications</a><a href="#contact">Contact</a></nav><span>Built with React <span className="footer-separator">·</span> Vite <span className="footer-separator">·</span> Tailwind</span><span>JEDV / END OF LOG</span></div></footer>
 
       <div className="toast-region" aria-live="polite" aria-atomic="true">{toasts.map((toast) => <div className="toast" key={toast.id}><span className="toast-mark">✓</span>{toast.message}</div>)}</div>
 
@@ -714,6 +714,7 @@ function GitHubActivity() {
                 src="https://ghchart.rshah.org/23-74173-cpu"
                 alt="GitHub contributions chart for 23-74173-cpu"
                 loading="lazy"
+                decoding="async"
                 className="github-chart-img"
               />
             </a>
