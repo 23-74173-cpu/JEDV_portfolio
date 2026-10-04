@@ -135,8 +135,8 @@ function StatusBadge({ status }: { status: ProjectStatus }) {
   return <span className={`status-badge status-${status.toLowerCase().replace(' ', '-')}`}><span className="status-dot" aria-hidden="true" />{status}</span>;
 }
 
-function App() {
-  const [theme, setTheme] = useState<Theme>(() => (localStorage.getItem('jedv-theme') as Theme | null) ?? 'dark');
+function App({ ssr = false }: { ssr?: boolean }) {
+  const [theme, setTheme] = useState<Theme>(() => (typeof window !== 'undefined' ? (localStorage.getItem('jedv-theme') as Theme | null) : null) ?? 'dark');
   const [activeSection, setActiveSection] = useState('hero');
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -590,7 +590,7 @@ function App() {
   return (
     <div className="site-shell">
       <div className="noise-layer" aria-hidden="true" />
-      {booting && <BootScreen />}
+      {booting && !ssr && <BootScreen />}
       <Header tone={headerTone} activeSection={activeSection} mobileNavOpen={mobileNavOpen} setMobileNavOpen={setMobileNavOpen} openPalette={() => setPaletteOpen(true)} scrollToSection={scrollToSection} />
 
       <main>
