@@ -13,6 +13,9 @@ export type Project = {
 
 export type TimelineEntry = {
   year: string;
+  /** Sort key (YYYY-MM). Displayed year stays in `year`; months are
+      sequence placeholders so same-year entries order deterministically. */
+  date: string;
   title: string;
   role: string;
   organization: string;
@@ -187,15 +190,15 @@ export const projects: Project[] = [
 ];
 
 export const timeline: TimelineEntry[] = [
-  { year: '2026', title: 'HILOM EHR', role: 'Full-stack Developer', organization: 'Active Development', description: 'Live pilot prep: 28-table AES-256-GCM, 14 audit events, <120ms p95. Solo schema + auth + encryption for real medical center.', badge: 'Freelance' },
-  { year: '2026', title: 'LayRate', role: 'Full-stack Developer', organization: 'IoT Capstone', description: 'Offline farm monitor: Pi 5 + Arduino (DHT22/IR), <2s latency, 92% forecast on 90-day backtest. 30-day field uptime.', badge: 'Education' },
-  { year: '2025', title: 'Talent Scout AI', role: 'Full-stack Developer', organization: 'Shipped', description: 'Shipped Nasugbu job-matching: 200+ profiles, 60% faster time-to-match, <300ms. React + Node + MySQL.', badge: 'Freelance' },
-  { year: '2025', title: 'Commissioned Desktop Systems', role: 'Freelance Developer', organization: 'Client delivery', description: '3 apps in 6 wks on shared C# lib — 40% less dev time. Library/Grading/Gym with role-based auth.', badge: 'Freelance' },
-  { year: '2025', title: 'J&R Photography Studio Booking System', role: 'Freelance Developer', organization: 'Client delivery', description: 'Live booking: 50+ appts/mo, 0 conflicts over 6 mo, SMS confirm. Client self-serves, no training.', badge: 'Freelance' },
-  { year: '2024', title: 'Microsoft IT Specialist Certification', role: 'Microsoft', organization: 'Industry credential', description: '3 certs (Data Analytics, Databases, Win10) — applied directly to HILOM schema design and encrypted field queries.', badge: 'Certification' },
-  { year: '2024', title: 'BSIT, Business Analytics', role: 'Batangas State University, ARASOF Nasugbu', organization: "Dean's List", description: "4th-year, Dean's List. Shipping 7 systems for 5 clients while completing degree — capstone is LayRate IoT + SARIMA.", badge: 'Education' },
-  { year: '2024', title: 'Cisco Networking Academy', role: 'Cisco', organization: 'Industry credentials', description: 'CCNA + AI Fundamentals (IBM) + Data Analytics Essentials — used for farm offline networking and SARIMA/XGBoost pipeline.', badge: 'Certification' },
-  { year: '2023', title: 'First Commissioned Projects', role: 'Freelance Developer', organization: 'Production software', description: 'First paid work: Plant POS (1,200 SKUs, 3h→20min/day) + Student Portal (500+ PDFs/sem, 1.2s/report).', badge: 'Freelance' },
+  { year: '2026', date: '2026-06', title: 'HILOM EHR', role: 'Full-stack Developer', organization: 'Active Development', description: 'Live pilot prep: 28-table AES-256-GCM, 14 audit events, <120ms p95. Solo schema + auth + encryption for real medical center.', badge: 'Freelance' },
+  { year: '2026', date: '2026-02', title: 'LayRate', role: 'Full-stack Developer', organization: 'IoT Capstone', description: 'Offline farm monitor: Pi 5 + Arduino (DHT22/IR), <2s latency, 92% forecast on 90-day backtest. 30-day field uptime.', badge: 'Education' },
+  { year: '2025', date: '2025-10', title: 'Talent Scout AI', role: 'Full-stack Developer', organization: 'Shipped', description: 'Shipped Nasugbu job-matching: 200+ profiles, 60% faster time-to-match, <300ms. React + Node + MySQL.', badge: 'Freelance' },
+  { year: '2025', date: '2025-06', title: 'Commissioned Desktop Systems', role: 'Freelance Developer', organization: 'Client delivery', description: '3 apps in 6 wks on shared C# lib — 40% less dev time. Library/Grading/Gym with role-based auth.', badge: 'Freelance' },
+  { year: '2025', date: '2025-02', title: 'J&R Photography Studio Booking System', role: 'Freelance Developer', organization: 'Client delivery', description: 'Live booking: 50+ appts/mo, 0 conflicts over 6 mo, SMS confirm. Client self-serves, no training.', badge: 'Freelance' },
+  { year: '2024', date: '2024-05', title: 'Microsoft IT Specialist Certification', role: 'Microsoft', organization: 'Industry credential', description: '3 certs (Data Analytics, Databases, Win10) — applied directly to HILOM schema design and encrypted field queries.', badge: 'Certification' },
+  { year: '2024', date: '2024-01', title: 'BSIT, Business Analytics', role: 'Batangas State University, ARASOF Nasugbu', organization: "Dean's List", description: "4th-year, Dean's List. Shipping 7 systems for 5 clients while completing degree — capstone is LayRate IoT + SARIMA.", badge: 'Education' },
+  { year: '2024', date: '2024-09', title: 'Cisco Networking Academy', role: 'Cisco', organization: 'Industry credentials', description: 'CCNA + AI Fundamentals (IBM) + Data Analytics Essentials — used for farm offline networking and SARIMA/XGBoost pipeline.', badge: 'Certification' },
+  { year: '2023', date: '2023-06', title: 'First Commissioned Projects', role: 'Freelance Developer', organization: 'Production software', description: 'First paid work: Plant POS (1,200 SKUs, 3h→20min/day) + Student Portal (500+ PDFs/sem, 1.2s/report).', badge: 'Freelance' },
 ];
 
 export const certifications = [

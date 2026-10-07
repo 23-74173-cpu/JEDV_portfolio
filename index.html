@@ -3,12 +3,15 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#111412" />
+    <meta name="theme-color" content="#0A0A0A" />
+    <script>
+      // Set before first paint: deferred module scripts run too late to stop
+      // the browser restoring the previous scroll position on reload.
+      try { history.scrollRestoration = 'manual'; } catch (e) {}
+    </script>
     <title>John Eduard De Villa — Full-Stack Developer Portfolio</title>
     <meta name="description" content="Portfolio of John Eduard De Villa, full-stack developer shipping production systems for real clients — HILOM EHR, IoT farm monitoring, booking, POS platforms." />
     <link rel="canonical" href="https://jedvportfolio.vercel.app/" />
-    <!-- TODO: replace with your Google Search Console token from https://search.google.com/search-console -->
-    <meta name="google-site-verification" content="TODO-GOOGLE-SEARCH-CONSOLE-TOKEN" />
     <meta property="og:title" content="John Eduard De Villa — Full-Stack Developer Portfolio" />
     <meta property="og:description" content="Portfolio of John Eduard De Villa, full-stack developer shipping production systems for real clients — HILOM EHR, IoT farm monitoring, booking, POS platforms." />
     <meta property="og:image" content="https://jedvportfolio.vercel.app/og-image.png" />
@@ -26,6 +29,8 @@
     <meta name="twitter:image:alt" content="John Eduard De Villa — full-stack developer portfolio" />
     <link rel="icon" type="image/svg+xml" href="/jedv-mark.svg" />
     <link rel="preconnect" href="https://ghchart.rshah.org" />
+    <link rel="preload" as="image" type="image/avif" href="/ProfilePic.avif" fetchpriority="high" />
+    <link rel="preload" as="image" type="image/avif" href="/PixProfilePic.avif" fetchpriority="high" />
     <script type="application/ld+json">
     {
       "@context": "https://schema.org",
