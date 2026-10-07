@@ -4,7 +4,6 @@ import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { ScrollToPlugin } from 'gsap/ScrollToPlugin';
 import { certifications, email, projects, skillGroups, technologies, timeline, type Project, type ProjectStatus } from './data';
-import { resumeText } from './resume';
 import { ErrorBoundary, NotFoundScreen, parseRoute } from './errors';
 import type { RouteState } from './errors';
 import {
@@ -81,6 +80,12 @@ const railItems = [
 ];
 
 const filters: Array<'All' | ProjectStatus> = ['All', 'Shipped', 'In Progress', 'Active'];
+
+// The desktop-only project deck (pinned, stacked cards) exists solely under
+// this query. Every deck visual driver must check it so mobile — a static
+// vertical list with no trigger — never gets card visuals forced on it.
+const DESKTOP_DECK_QUERY = '(min-width: 701px) and (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference)';
+const isDesktopDeck = () => typeof window !== 'undefined' && window.matchMedia(DESKTOP_DECK_QUERY).matches;
 
 function ArrowUpRight() {
   return <span aria-hidden="true" className="arrow-icon">↗</span>;
@@ -247,13 +252,10 @@ function App({ ssr = false }: { ssr?: boolean }) {
   const downloadResume = () => {
     setResumeState('preparing');
     notify('Resume downloading');
-    const blob = new Blob([resumeText], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
-    link.href = url;
-    link.download = 'john-eduard-de-villa-resume.txt';
+    link.href = '/john-eduard-de-villa-resume.pdf';
+    link.download = 'john-eduard-de-villa-resume.pdf';
     link.click();
-    URL.revokeObjectURL(url);
     window.setTimeout(() => setResumeState('saved'), 700);
     window.setTimeout(() => setResumeState('idle'), 3200);
   };
@@ -524,8 +526,9 @@ function App({ ssr = false }: { ssr?: boolean }) {
       : { locked: false, index: deckLockRef.current.index };
     scheduleProjectsRefresh();
     // STEP 4: re-sync to the (possibly locked) card immediately; pin
-    // geometry refresh follows on the next frame.
-    deckSettleRef.current?.();
+    // geometry refresh follows on the next frame. Desktop-only: on mobile
+    // the cards are a static list with no trigger to sync to.
+    if (isDesktopDeck()) deckSettleRef.current?.();
     return () => window.cancelAnimationFrame(projectsRefreshRaf.current);
   }, [expandedProjects, filter]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -555,12 +558,44 @@ function App({ ssr = false }: { ssr?: boolean }) {
     let timer = 0;
     const onScrollEnd = () => {
       window.clearTimeout(timer);
+      // Deck-only fallback: without the desktop pin there is no active card
+      // to settle, and calling the stale closure would re-hide contents.
+      if (!isDesktopDeck()) return;
       timer = window.setTimeout(() => deckSettleRef.current?.(), 150);
     };
     window.addEventListener('scroll', onScrollEnd, { passive: true });
     return () => {
       window.removeEventListener('scroll', onScrollEnd);
       window.clearTimeout(timer);
+    };
+  }, []);
+
+  // Safety net for desktop -> mobile switches: if any GSAP inline styles
+  // survive context teardown (missed cleanup, killed tween), strip them
+  // while the desktop deck is inactive so cards can never strand invisible
+  // or offset. Desktop is untouched — this early-returns while the pin owns
+  // the deck.
+  useEffect(() => {
+    const query = window.matchMedia(DESKTOP_DECK_QUERY);
+    const resetDeckInlineStyles = () => {
+      if (query.matches) return;
+      document.querySelectorAll<HTMLElement>('.project-card').forEach((card) => {
+        card.style.transform = '';
+        card.style.opacity = '';
+        card.style.visibility = '';
+        card.style.zIndex = '';
+      });
+      document.querySelectorAll<HTMLElement>('.project-card-content').forEach((content) => {
+        content.style.opacity = '';
+        content.style.visibility = '';
+      });
+    };
+    resetDeckInlineStyles();
+    window.addEventListener('resize', resetDeckInlineStyles);
+    if (typeof query.addEventListener === 'function') query.addEventListener('change', resetDeckInlineStyles);
+    return () => {
+      window.removeEventListener('resize', resetDeckInlineStyles);
+      if (typeof query.removeEventListener === 'function') query.removeEventListener('change', resetDeckInlineStyles);
     };
   }, []);
 
@@ -875,6 +910,13 @@ function App({ ssr = false }: { ssr?: boolean }) {
           window.clearTimeout(layoutSettleTimer);
           window.cancelAnimationFrame(refreshFrame);
           if (projectsTriggerRef.current?.vars.id === 'projects-reveal') projectsTriggerRef.current = null;
+          // Deck owns no visuals off-desktop: drop the settle closure so no
+          // fallback can re-hide card contents on mobile, and strip every
+          // inline style the deck wrote so a desktop -> mobile switch never
+          // strands invisible or offset cards.
+          deckSettleRef.current = null;
+          gsap.set(projectCards, { clearProps: 'all' });
+          gsap.set(projectCardContents, { clearProps: 'all' });
         };
       });
       matchMedia.add('(prefers-reduced-motion: no-preference)', () => {
@@ -904,6 +946,141 @@ function App({ ssr = false }: { ssr?: boolean }) {
       gsap.set(timelineTrack, { clearProps: 'transform' });
     };
   }, [filter]);
+
+  // Native horizontal-scroll timeline progress (mobile / touch / reduced
+  // motion). The pinned GSAP ScrollTrigger above only exists on
+  // min-width:701px + hover:hover + fine pointer — everywhere else the
+  // viewport scrolls natively (overflow-x:auto) and nothing updated the
+  // progress fill or entry states. This effect owns exactly that case:
+  // it early-returns while the desktop pin is active, so desktop geometry,
+  // scrub, and snap are untouched.
+  useEffect(() => {
+    const viewport = timelineViewportRef.current;
+    const track = timelineTrackRef.current;
+    const section = timelineSectionRef.current;
+    if (!viewport || !track) return undefined;
+    const desktopQuery = window.matchMedia('(min-width: 701px) and (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference)');
+
+    let anchors: number[] = [];
+    let barWidth = 0;
+    let lastIndex = -1;
+
+    const measure = () => {
+      const entries = track.querySelectorAll<HTMLElement>('.timeline-entry');
+      const end = track.querySelector<HTMLElement>('.timeline-end');
+      const bar = track.querySelector<HTMLElement>('.timeline-progress');
+      const width = track.scrollWidth;
+      if (!entries.length || width <= 0 || !bar) {
+        anchors = [];
+        barWidth = 0;
+        return;
+      }
+      const markers = Array.from(entries, (entry) => entry.offsetLeft);
+      markers.push(end ? end.offsetLeft : width);
+      anchors = markers;
+      barWidth = bar.clientWidth || width;
+    };
+
+    const fillXForProgress = (progress: number) => {
+      const p = Math.min(1, Math.max(0, progress));
+      if (anchors.length < 2) return p * barWidth;
+      const segments = anchors.length - 1;
+      const t = Math.min(segments, Math.max(0, p * segments));
+      const k = Math.min(segments - 1, Math.floor(t));
+      const frac = t - k;
+      return anchors[k] + (anchors[k + 1] - anchors[k]) * frac;
+    };
+
+    const paint = (progress: number) => {
+      const bar = track.querySelector<HTMLElement>('.timeline-progress');
+      if (!bar) return;
+      const p = Math.min(1, Math.max(0, progress));
+      if (!anchors.length || barWidth <= 0) {
+        bar.style.transform = `scaleX(${p})`;
+        return;
+      }
+      const first = anchors[0];
+      const last = anchors[anchors.length - 1];
+      const fillX = Math.min(last, Math.max(first, fillXForProgress(p)));
+      bar.style.transform = `scaleX(${Math.min(1, Math.max(0, fillX / barWidth))})`;
+    };
+
+    const syncStates = (progress: number) => {
+      const entries = track.querySelectorAll<HTMLElement>('.timeline-entry');
+      if (!entries.length) return;
+      let active: number;
+      if (!anchors.length) {
+        const p = Math.min(1, Math.max(0, progress));
+        active = Math.max(0, Math.min(entries.length - 1, Math.floor(p * entries.length)));
+      } else {
+        const fillX = fillXForProgress(progress);
+        active = 0;
+        for (let i = 0; i < entries.length; i += 1) {
+          if (anchors[i] <= fillX + 0.5) active = i;
+          else break;
+        }
+      }
+      if (active === lastIndex) return;
+      lastIndex = active;
+      entries.forEach((entry, i) => {
+        entry.dataset.state = i < active ? 'reached' : i === active ? 'current' : 'upcoming';
+      });
+      const counter = section?.querySelector<HTMLElement>('[data-timeline-counter]');
+      if (counter) counter.textContent = `${String(active + 1).padStart(2, '0')} / ${String(entries.length).padStart(2, '0')}`;
+    };
+
+    const progressFromViewport = () => {
+      const max = track.scrollWidth - viewport.clientWidth;
+      if (max <= 0) return 0;
+      return Math.min(1, Math.max(0, viewport.scrollLeft / max));
+    };
+
+    let raf = 0;
+    const render = () => {
+      raf = 0;
+      if (desktopQuery.matches) return;
+      // The desktop pin translates the track; native mode must stay at x:0
+      // so offsetLeft anchors and scrollLeft stay in the same space.
+      if (track.style.transform) track.style.transform = '';
+      const p = progressFromViewport();
+      paint(p);
+      syncStates(p);
+    };
+    const schedule = () => {
+      if (!raf) raf = window.requestAnimationFrame(render);
+    };
+
+    const handleMediaChange = () => {
+      if (desktopQuery.matches) return;
+      measure();
+      lastIndex = -1;
+      schedule();
+    };
+
+    measure();
+    schedule();
+    viewport.addEventListener('scroll', schedule, { passive: true });
+    window.addEventListener('resize', handleMediaChange);
+    if (typeof desktopQuery.addEventListener === 'function') desktopQuery.addEventListener('change', handleMediaChange);
+    let fontsSettled = false;
+    document.fonts?.ready.then(() => {
+      if (!fontsSettled) {
+        fontsSettled = true;
+        if (!desktopQuery.matches) {
+          measure();
+          lastIndex = -1;
+          schedule();
+        }
+      }
+    }).catch(() => undefined);
+
+    return () => {
+      window.cancelAnimationFrame(raf);
+      viewport.removeEventListener('scroll', schedule);
+      window.removeEventListener('resize', handleMediaChange);
+      if (typeof desktopQuery.removeEventListener === 'function') desktopQuery.removeEventListener('change', handleMediaChange);
+    };
+  }, []);
 
   const commands: PaletteCommand[] = [
     ...navItems.map((item) => ({ id: `jump-${item.id}`, label: item.label, group: 'Jump to', hint: `/${item.id}`, action: () => scrollToSection(item.id, item.label) })),
@@ -1036,7 +1213,7 @@ function App({ ssr = false }: { ssr?: boolean }) {
       </main>
       )}
 
-      <footer className="site-footer"><div className="container footer-content"><span>© 2026 John Eduard De Villa</span><nav className="footer-nav" aria-label="Footer"><a href="#about">About</a><a href="#projects">Projects</a><a href="#experience">Experience</a><a href="#certifications">Certifications</a><a href="#contact">Contact</a></nav><span>Built with React <span className="footer-separator">·</span> Vite <span className="footer-separator">·</span> Tailwind</span><span>JEDV / END OF LOG</span></div></footer>
+      <footer className="site-footer"><div className="container footer-content"><span>© 2026 John Eduard De Villa</span><span className="footer-built">Built with React <span className="footer-separator">·</span> Vite <span className="footer-separator">·</span> Tailwind</span><span className="footer-mark" aria-label="JEDV">JEDV<span className="wordmark-cursor">_</span></span></div></footer>
 
       <div className="toast-region" aria-live="polite" aria-atomic="true">{toasts.map((toast) => <div className="toast" key={toast.id}><span className="toast-mark">✓</span>{toast.message}</div>)}</div>
 
@@ -1120,60 +1297,18 @@ function Header({ activeSection, mobileNavOpen, setMobileNavOpen, openPalette, s
 }
 
 function HeroPortrait({ variant }: { variant: 'side' | 'inline' }) {
-  const [revealed, setRevealed] = useState(false);
-  const [sharpLoaded, setSharpLoaded] = useState(false);
-  const [showLoader, setShowLoader] = useState(false);
-
-  useEffect(() => {
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      setRevealed(true);
-      return;
-    }
-    // Boot screen lifts at ~1250ms; start the pixel -> sharp reveal just after
-    // so the halftone is the visible initial state.
-    const timer = window.setTimeout(() => setRevealed(true), 1350);
-    return () => window.clearTimeout(timer);
-  }, []);
-
-  useEffect(() => {
-    if (sharpLoaded) {
-      setShowLoader(false);
-      return;
-    }
-    // Grace period: only surface the loader when the photo is actually slow.
-    const timer = window.setTimeout(() => setShowLoader(true), 600);
-    return () => window.clearTimeout(timer);
-  }, [sharpLoaded]);
-
-  // Never fade the pixel layer before the sharp photo is ready — otherwise
-  // slow networks would flash an empty black frame.
-  const isRevealed = revealed && sharpLoaded;
-
+  // The halftone portrait is the photo — no crossfade, no loader. The hero
+  // intro tween (y + fade on .hero-portrait) is the entrance reveal.
   return (
-    <figure className={`hero-portrait hero-portrait--${variant}${isRevealed ? ' is-revealed' : ''}`} aria-label="Portrait of John Eduard De Villa">
+    <figure className={`hero-portrait hero-portrait--${variant}`} aria-label="Portrait of John Eduard De Villa">
       <div className="hero-portrait-top"><span>JEDV / PORTRAIT</span><span className="hero-portrait-status"><span className="live-signal" aria-hidden="true" />ONLINE</span></div>
       <div className="hero-portrait-frame">
-        <picture className="hero-portrait-img hero-portrait-sharp">
-          <source srcSet="/ProfilePic.avif" type="image/avif" />
-          <source srcSet="/ProfilePic.webp" type="image/webp" />
-          <img
-            src="/ProfilePic.png"
-            alt="Black-and-white portrait of John Eduard De Villa"
-            width={1086}
-            height={1448}
-            loading="eager"
-            decoding="async"
-            fetchPriority="high"
-            onLoad={() => setSharpLoaded(true)}
-            onError={() => setSharpLoaded(true)}
-          />
-        </picture>
-        <picture className="hero-portrait-img hero-portrait-pixel" aria-hidden="true">
+        <picture className="hero-portrait-img">
           <source srcSet="/PixProfilePic.avif" type="image/avif" />
           <source srcSet="/PixProfilePic.webp" type="image/webp" />
           <img
             src="/PixProfilePic.png"
-            alt=""
+            alt="Halftone black-and-white portrait of John Eduard De Villa"
             width={1087}
             height={1447}
             loading="eager"
@@ -1181,12 +1316,6 @@ function HeroPortrait({ variant }: { variant: 'side' | 'inline' }) {
             fetchPriority="high"
           />
         </picture>
-        {showLoader && !sharpLoaded && (
-          <div className="hero-portrait-loader" role="status">
-            <span>Loading portrait</span>
-            <span className="hero-portrait-loader-bar" aria-hidden="true"><i /></span>
-          </div>
-        )}
       </div>
       <div className="hero-portrait-bottom"><span>BUILD MODE: SOLO</span></div>
     </figure>
@@ -1278,7 +1407,31 @@ function TimelineSection({ scrollToSection, sectionRef, viewportRef, trackRef }:
 }
 
 function CertificationsSection() {
-  return <section className="ink-section certifications-section" id="certifications" aria-labelledby="certifications-title"><div className="container"><div className="section-heading-row"><h2 id="certifications-title">Industry<br /><em>credentials</em></h2><div className="heading-side"><SectionLabel>Certifications</SectionLabel><p className="section-subheading">Signals of curiosity,<br />not just completion.</p></div></div><div className="certification-grid">{certifications.map((certification, index) => <article className="certification-card section-scroll-reveal" key={certification.issuer}><div className="certification-index">0{index + 1} / CREDENTIAL</div><h3>{certification.issuer}</h3><ul>{certification.items.map((item) => <li key={item}><span aria-hidden="true">↳</span>{item}</li>)}</ul><div className="certification-seal" aria-hidden="true">VERIFIED<br />FIELD<br />SIGNAL</div></article>)}</div></div></section>;
+  const [activeCert, setActiveCert] = useState<{ issuer: string; label: string; image: string; issued?: string } | null>(null);
+
+  useEffect(() => {
+    if (!activeCert) return undefined;
+    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') setActiveCert(null); };
+    window.addEventListener('keydown', onKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { window.removeEventListener('keydown', onKey); document.body.style.overflow = prevOverflow; };
+  }, [activeCert]);
+
+  return <><section className="ink-section certifications-section" id="certifications" aria-labelledby="certifications-title"><div className="container"><div className="section-heading-row"><h2 id="certifications-title">Industry<br /><em>credentials</em></h2><div className="heading-side"><SectionLabel>Certifications</SectionLabel><p className="section-subheading">Signals of curiosity,<br />not just completion.</p></div></div><div className="certification-grid">{certifications.map((certification, index) => <article className="certification-card section-scroll-reveal" key={certification.issuer}><div className="certification-index">0{index + 1} / CREDENTIAL</div><h3>{certification.issuer}</h3><ul>{certification.items.map((item) => <li key={item.label}><button type="button" className="cert-item-button" onClick={() => setActiveCert({ issuer: certification.issuer, label: item.label, image: item.image, issued: item.issued })} aria-haspopup="dialog"><span aria-hidden="true">↳</span>{item.label}</button></li>)}</ul><div className="certification-seal" aria-hidden="true">VERIFIED<br />FIELD<br />SIGNAL</div></article>)}</div></div></section>
+  {activeCert && <CertModal cert={activeCert} close={() => setActiveCert(null)} />}</>;
+}
+
+function CertModal({ cert, close }: { cert: { issuer: string; label: string; image: string; issued?: string }; close: () => void }) {
+  const titleId = useId();
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    closeButtonRef.current?.focus();
+  }, []);
+
+  return <div className="inspection-backdrop cert-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) close(); }} onWheel={(event) => event.stopPropagation()}><section className="inspection-dialog cert-dialog" role="dialog" aria-modal="true" aria-labelledby={titleId}><div className="inspection-chrome"><span className="palette-lights" aria-hidden="true"><i /><i /><i /></span><span>CREDENTIAL / {cert.issuer}</span><button ref={closeButtonRef} className="inspection-close" onClick={close} aria-label="Close certificate dialog">×</button></div><div className="inspection-content cert-content"><h2 id={titleId}>{cert.label}</h2>{cert.issued && <div className="inspection-meta"><span>Issued</span><p>{cert.issued}</p></div>}{failed ? <p className="cert-placeholder">Certificate preview unavailable.</p> : <img className="cert-image" src={cert.image} alt={`${cert.label} certificate`} onError={() => setFailed(true)} />}<button className="inspection-action" onClick={close}>Close credential <span aria-hidden="true">↗</span></button></div></section></div>;
 }
 
 function InspectionModal({ project, close }: { project: Project; close: () => void }) {

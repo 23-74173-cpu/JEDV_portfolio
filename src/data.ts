@@ -201,13 +201,40 @@ export const timeline: TimelineEntry[] = [
   { year: '2023', date: '2023-06', title: 'First Commissioned Projects', role: 'Freelance Developer', organization: 'Production software', description: 'First paid work: Plant POS (1,200 SKUs, 3h→20min/day) + Student Portal (500+ PDFs/sem, 1.2s/report).', badge: 'Freelance' },
 ];
 
-export const certifications = [
+export interface CertificationItem {
+  label: string;
+  /** File path under public/, e.g. '/certs/cisco-ccna.jpg' */
+  image: string;
+  /** Displayed in the popup, e.g. 'November 2025' */
+  issued?: string;
+}
+
+export interface Certification {
+  issuer: string;
+  items: CertificationItem[];
+}
+
+export const certifications: Certification[] = [
   {
     issuer: 'Microsoft IT Specialist',
-    items: ['Data Analytics', 'Databases', 'Device Configuration & Management (Windows 10)'],
+    items: [
+      { label: 'Data Analytics', image: '/certs/its-data-analytics.jpg' },
+      { label: 'Databases', image: '/certs/its-databases.jpg' },
+      { label: 'Device Configuration & Management (Windows 10)', image: '/certs/its-device-configuration.jpg' },
+    ],
   },
   {
     issuer: 'Cisco Networking Academy',
-    items: ['CCNA: Switching, Routing & Wireless Essentials', 'AI Fundamentals with IBM SkillsBuild', 'Data Analytics Essentials', 'Introduction to Data Science'],
+    items: [
+      { label: 'AI Fundamentals with IBM SkillsBuild', image: '/certs/cisco-ai-fundamentals-ibm.jpg', issued: 'November 2025' },
+      { label: 'English for IT 2', image: '/certs/cisco-english-it-2.jpg', issued: 'November 2025' },
+      { label: 'English for IT 1', image: '/certs/cisco-english-it-1.jpg', issued: 'November 2025' },
+      { label: 'Introduction to Modern AI', image: '/certs/cisco-modern-ai.jpg', issued: 'November 2025' },
+      { label: 'Introduction to Data Science', image: '/certs/cisco-data-science.jpg', issued: 'November 2025' },
+      { label: 'Apply AI: Analyze Customer Reviews', image: '/certs/cisco-apply-ai-reviews.jpg', issued: 'October 2025' },
+      { label: 'CCNA: Switching, Routing, and Wireless Essentials', image: '/certs/cisco-ccna.jpg', issued: 'July 2025' },
+      { label: 'Data Analytics Essentials', image: '/certs/cisco-data-analytics-essentials.jpg', issued: 'May 2025' },
+      { label: 'Introduction to Packet Tracer', image: '/certs/cisco-packet-tracer.jpg', issued: 'September 2024' },
+    ],
   },
 ];

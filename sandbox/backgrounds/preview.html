@@ -1,0 +1,331 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>BG Sandbox — preview (not part of the app)</title>
+<style>
+/* SANDBOX token copy. Source of truth: src/index.css. Real token names,
+   same values. If index.css changes, re-copy — never the reverse. */
+:root {
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --bg: #0A0A0A;
+  --surface: #111110;
+  --surface-2: #171716;
+  --text: #F2F0E8;
+  --text-muted: #A3A39B;
+  --text-faint: #6E6E68;
+  --border: rgba(242, 240, 232, 0.14);
+  --border-strong: rgba(242, 240, 232, 0.38);
+  --inverse-bg: #F2F0E8;
+  --inverse-text: #0A0A0A;
+  --lime: #C7FF3D;
+  --on-lime: #0A0A0A;
+  --paper: #F2F0E8;
+  --paper-2: #E7E4D7;
+  --ink-text: #131311;
+  --ink-muted: #61615b;
+  --ink-faint: #9b9b93;
+  --ink-line: #D5D2C6;
+  --ink-line-strong: #131311;
+  --mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  --text-xs: 0.6875rem;
+  --text-sm: 0.75rem;
+  --text-base: 1rem;
+  --text-h3: clamp(1.6rem, 2.6vw, 2.4rem);
+  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+  color: var(--text);
+  background: var(--bg);
+}
+:root[data-theme="light"] {
+  --bg: #f7f6f2;
+  --surface: #ffffff;
+  --surface-2: #edebe4;
+  --text: #131311;
+  --text-muted: #5e5e59;
+  --text-faint: #97978f;
+  --border: rgba(19, 19, 17, 0.16);
+  --border-strong: rgba(19, 19, 17, 0.45);
+  --inverse-bg: #0a0a0a;
+  --inverse-text: #f4f3ee;
+  color: var(--text);
+  background: var(--bg);
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); }
+/* ---- preview chrome (z above bg layers which sit at z-index 0) ---- */
+.pv-bar {
+  position: sticky; top: 0; z-index: 60;
+  background: var(--surface); color: var(--text);
+  border-bottom: 1px solid var(--border-strong);
+  padding: 10px 16px;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px;
+  font-family: var(--mono); font-size: var(--text-xs);
+  text-transform: uppercase; letter-spacing: 0.1em;
+}
+.pv-title { color: var(--text); font-weight: 700; }
+.pv-title em { font-style: normal; color: var(--lime); }
+:root[data-theme="light"] .pv-title em { color: inherit; }
+.pv-group { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.pv-btn {
+  border: 1px solid var(--border-strong); background: transparent; color: var(--text-muted);
+  font-family: var(--mono); font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.08em;
+  padding: 7px 10px; border-radius: 0; cursor: pointer;
+}
+.pv-btn:hover { color: var(--text); border-color: var(--text); }
+.pv-btn[aria-pressed="true"] { background: var(--inverse-bg); color: var(--inverse-text); border-color: var(--inverse-bg); }
+.pv-btn kbd { opacity: 0.55; margin-left: 6px; }
+.pv-read { color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.pv-read strong { color: var(--text); font-weight: 400; }
+.pv-sep { width: 1px; height: 18px; background: var(--border-strong); }
+label.pv-check { display: inline-flex; align-items: center; gap: 6px; color: var(--text-muted); cursor: pointer; }
+input[type="range"] { accent-color: var(--lime); }
+button:focus-visible, a:focus-visible, input:focus-visible {
+  outline: 2px solid var(--text); outline-offset: 3px;
+}
+/* ---- content overlay (sits above bg: position + z-index) ---- */
+.pv-content { position: relative; z-index: 1; width: min(880px, calc(100% - 32px)); margin: 0 auto; padding: 48px 0 24px; }
+.section-label {
+  display: flex; align-items: center; gap: 10px; margin: 0 0 20px;
+  color: var(--text-muted); font-family: var(--mono); font-size: var(--text-xs);
+  text-transform: uppercase; letter-spacing: 0.14em;
+}
+.label-dot { width: 6px; height: 6px; background: var(--lime); flex: 0 0 auto; }
+.mock-card { border: 1px solid var(--border-strong); background: var(--surface); padding: 28px; }
+.mock-card h2 { margin: 0 0 10px; font-size: var(--text-h3); letter-spacing: -0.03em; font-weight: 500; }
+.mock-card .lede { margin: 0 0 18px; color: var(--text-muted); line-height: 1.6; max-width: 40rem; }
+.tag-row { display: flex; flex-wrap: wrap; gap: 0; margin: 0 0 18px; border-top: 1px solid var(--border-strong); }
+.tag-row span {
+  font-family: var(--mono); font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--text-muted); padding: 8px 12px; border-right: 1px solid var(--border);
+}
+.micro-labels { display: grid; gap: 6px; margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border); }
+.micro-labels small { font-family: var(--mono); font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.12em; color: var(--text-faint); }
+/* ---- paper test panel: the timeline stays clean ---- */
+.paper-panel {
+  position: relative; z-index: 1;
+  width: min(880px, calc(100% - 32px)); margin: 24px auto;
+  background: var(--paper); color: var(--ink-text);
+  border: 1px solid var(--ink-line-strong); padding: 28px;
+}
+.paper-panel .section-label { color: var(--ink-muted); }
+.paper-panel .label-dot { background: var(--ink-text); }
+.paper-panel h2 { margin: 0 0 10px; font-size: var(--text-h3); letter-spacing: -0.03em; font-weight: 500; }
+.paper-panel p { margin: 0; color: var(--ink-muted); line-height: 1.6; max-width: 42rem; }
+.paper-panel code { font-family: var(--mono); font-size: 0.85em; color: var(--ink-text); }
+/* ---- tint simulator ---- */
+.sim-box { position: relative; z-index: 1; width: min(880px, calc(100% - 32px)); margin: 24px auto; border: 1px solid var(--border-strong); background: var(--surface); padding: 20px; }
+.sim-box h3 { margin: 0 0 6px; font-family: var(--mono); font-size: var(--text-sm); text-transform: uppercase; letter-spacing: 0.1em; font-weight: 400; }
+.sim-box p { margin: 0 0 12px; color: var(--text-muted); font-size: var(--text-sm); line-height: 1.6; }
+.sim-scroll { height: 180px; overflow-y: auto; border: 1px solid var(--border); scrollbar-width: thin; }
+.sim-scroll section { min-height: 170px; padding: 14px; border-bottom: 1px solid var(--border); font-family: var(--mono); font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.12em; color: var(--text-muted); }
+.sim-scroll section:last-child { border-bottom: 0; }
+.pv-foot { position: relative; z-index: 1; width: min(880px, calc(100% - 32px)); margin: 0 auto; padding: 8px 0 64px; color: var(--text-faint); font-family: var(--mono); font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.1em; }
+@media (prefers-reduced-motion: reduce) { * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; } }
+</style>
+</head>
+<body>
+<header class="pv-bar" aria-label="Sandbox controls">
+  <span class="pv-title">BG_SANDBOX<em>_</em></span>
+  <div class="pv-group" role="group" aria-label="Background option" id="optRow"></div>
+  <span class="pv-sep" aria-hidden="true"></span>
+  <div class="pv-group">
+    <button class="pv-btn" id="themeBtn" aria-pressed="false">theme: dark</button>
+    <button class="pv-btn" id="pauseBtn" aria-pressed="false">pause</button>
+    <label class="pv-check"><input type="checkbox" id="rmSim" /> sim reduced-motion</label>
+    <label class="pv-check">intensity <input type="range" id="intensity" min="0" max="150" value="100" aria-label="Background intensity" /></label>
+  </div>
+  <span class="pv-sep" aria-hidden="true"></span>
+  <div class="pv-group">
+    <span class="pv-read" aria-live="off">fps <strong id="fps">—</strong></span>
+    <span class="pv-read">longtasks <strong id="lt">0</strong></span>
+    <span class="pv-read">last <strong id="ltLast">—</strong></span>
+    <span class="pv-read" id="costLine">cost —</span>
+  </div>
+</header>
+
+<main class="pv-content">
+  <p class="section-label"><span class="label-dot" aria-hidden="true"></span><span id="optLabel">01 / gradient drift</span></p>
+  <article class="mock-card" aria-label="Readability sample">
+    <p class="section-label"><span class="label-dot" aria-hidden="true"></span>Featured projects // readability sample</p>
+    <h2>Production systems I&rsquo;ve built</h2>
+    <p class="lede">Evidence over adjectives. Open a case file: HILOM EHR encrypts 28 tables with AES-256-GCM for a live medical center — judge whether the background behind this card ever fights the text.</p>
+    <div class="tag-row" aria-label="Tags"><span>React</span><span>TypeScript</span><span>Laravel</span><span>MySQL</span><span>Shipped</span></div>
+    <div class="micro-labels" aria-label="Small mono labels">
+      <small>sys.status // all systems nominal</small>
+      <small>11px mono faint — first to break if contrast drops</small>
+      <small>01 / introduction · scroll to inspect ↓</small>
+    </div>
+  </article>
+</main>
+
+<section class="paper-panel" aria-label="Paper background test">
+  <p class="section-label"><span class="label-dot" aria-hidden="true"></span>Timeline / paper — must stay clean</p>
+  <h2>Experience timeline</h2>
+  <p>This panel uses <code>--paper / --ink-text</code> and is fully opaque, exactly like the real timeline section. No background option is ever mounted here — if you can see drift, glow, dots or grain inside this box, that is a bug. Report it.</p>
+</section>
+
+<section class="sim-box" aria-label="Section tint simulator">
+  <h3>Section-tint simulator → <span id="progVal">0.00</span></h3>
+  <p>Only active for option 06. Drag the slider, or scroll the fake page below — both call the same <code>window.JEDV_SECTION_TINT.setProgress(0..1)</code> API the real integration would use.</p>
+  <p><label>scroll progress <input type="range" id="progress" min="0" max="100" value="0" aria-label="Simulated scroll progress" /></label></p>
+  <div class="sim-scroll" id="simScroll" tabindex="0" aria-label="Fake multi-section page">
+    <section>SEC.01 — hero (p ≈ 0.00)</section>
+    <section>SEC.02 — projects (p ≈ 0.33)</section>
+    <section>SEC.03 — experience (p ≈ 0.66)</section>
+    <section>SEC.04 — contact (p ≈ 1.00)</section>
+  </div>
+</section>
+
+<footer class="pv-foot">sandbox only — nothing here ships · keys 1–7 switch · t theme · space pause · r reduced-motion sim</footer>
+
+<script src="./bg-01-gradient-drift.js"></script>
+<script src="./bg-02-cursor-spotlight.js"></script>
+<script src="./bg-03-dot-grid-reveal.js"></script>
+<script src="./bg-04-blueprint-grid.js"></script>
+<script src="./bg-05-grain-scanlines.js"></script>
+<script src="./bg-06-section-tint.js"></script>
+<script src="./bg-combo.js"></script>
+<script>
+(function () {
+  var ORDER = [
+    'gradient-drift', 'cursor-spotlight', 'dot-grid-reveal', 'blueprint-grid',
+    'grain-scanlines', 'section-tint', 'combo-drift-spot-grain'
+  ];
+  var COST = {
+    'gradient-drift': '≈3 compositor layers, 0 JS/frame',
+    'cursor-spotlight': '≈0 idle, 2 style writes/frame while moving',
+    'dot-grid-reveal': '≈0 idle, 3 transform writes/frame while moving',
+    'blueprint-grid': '1 layer translate, 0 JS/frame',
+    'grain-scanlines': '1 opacity tween, 0 JS/frame',
+    'section-tint': '0 idle, 3 opacity writes per scroll tick',
+    'combo-drift-spot-grain': 'sum of 01+02+05, still no layout/paint'
+  };
+  var current = null, currentId = null, paused = false, intensity = 1;
+
+  var optRow = document.getElementById('optRow');
+  var optLabel = document.getElementById('optLabel');
+  var costLine = document.getElementById('costLine');
+  var pauseBtn = document.getElementById('pauseBtn');
+  var themeBtn = document.getElementById('themeBtn');
+  var rmSim = document.getElementById('rmSim');
+  var intensityEl = document.getElementById('intensity');
+  var progressEl = document.getElementById('progress');
+  var progVal = document.getElementById('progVal');
+  var simScroll = document.getElementById('simScroll');
+
+  ORDER.forEach(function (id, i) {
+    var b = document.createElement('button');
+    b.className = 'pv-btn';
+    b.setAttribute('aria-pressed', 'false');
+    b.innerHTML = String(i + 1) + ' · ' + id.replace(/-/g, ' ') + '<kbd>' + (i + 1) + '</kbd>';
+    b.addEventListener('click', function () { select(id); });
+    b.dataset.bg = id;
+    optRow.appendChild(b);
+  });
+
+  function select(id) {
+    if (current) current.destroy();
+    current = null; currentId = id;
+    var mod = (window.JEDV_BG || {})[id];
+    if (mod) {
+      current = mod.mount({ intensity: intensity });
+      if (paused && current.setPaused) current.setPaused(true);
+      if (id === 'section-tint' && current.setProgress) {
+        current.setProgress(progressEl.value / 100);
+      }
+    }
+    var btns = optRow.querySelectorAll('.pv-btn');
+    btns.forEach(function (x) { x.setAttribute('aria-pressed', String(x.dataset.bg === id)); });
+    var idx = ORDER.indexOf(id);
+    optLabel.textContent = '0' + (idx + 1) + ' / ' + (mod ? mod.name : id);
+    costLine.textContent = 'cost ' + (COST[id] || '—');
+    try { window.location.hash = id; } catch (e) {}
+  }
+
+  function setTheme(t) {
+    document.documentElement.dataset.theme = t;
+    themeBtn.textContent = 'theme: ' + t;
+    themeBtn.setAttribute('aria-pressed', String(t === 'light'));
+  }
+  themeBtn.addEventListener('click', function () {
+    setTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark');
+  });
+
+  function setPaused(p) {
+    paused = p;
+    pauseBtn.setAttribute('aria-pressed', String(p));
+    pauseBtn.textContent = p ? 'resume' : 'pause';
+    if (current && current.setPaused) current.setPaused(p);
+  }
+  pauseBtn.addEventListener('click', function () { setPaused(!paused); });
+
+  rmSim.addEventListener('change', function () {
+    document.documentElement.classList.toggle('sim-rm', rmSim.checked);
+    document.dispatchEvent(new Event('jedv-sim-rm'));
+  });
+
+  intensityEl.addEventListener('input', function () {
+    intensity = intensityEl.value / 100;
+    if (current && current.setIntensity) current.setIntensity(intensity);
+  });
+
+  function pushProgress(p) {
+    p = Math.min(1, Math.max(0, p));
+    progressEl.value = String(Math.round(p * 100));
+    progVal.textContent = p.toFixed(2);
+    if (window.JEDV_SECTION_TINT && window.JEDV_SECTION_TINT.setProgress) {
+      window.JEDV_SECTION_TINT.setProgress(p);
+    }
+  }
+  progressEl.addEventListener('input', function () { pushProgress(progressEl.value / 100); });
+  var simTick = false;
+  simScroll.addEventListener('scroll', function () {
+    if (simTick) return; simTick = true;
+    window.requestAnimationFrame(function () {
+      simTick = false;
+      var max = simScroll.scrollHeight - simScroll.clientHeight;
+      pushProgress(max > 0 ? simScroll.scrollTop / max : 0);
+    });
+  }, { passive: true });
+
+  document.addEventListener('keydown', function (e) {
+    var tag = (e.target && e.target.tagName) || '';
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || e.target.isContentEditable) return;
+    if (e.key >= '1' && e.key <= '7') select(ORDER[Number(e.key) - 1]);
+    else if (e.key === 't' || e.key === 'T') themeBtn.click();
+    else if (e.key === ' ') { e.preventDefault(); setPaused(!paused); }
+    else if (e.key === 'r' || e.key === 'R') { rmSim.checked = !rmSim.checked; rmSim.dispatchEvent(new Event('change')); }
+  });
+
+  /* ---- perf readout: FPS (EMA) + longtask count ---- */
+  var fpsEl = document.getElementById('fps');
+  var ltEl = document.getElementById('lt');
+  var ltLastEl = document.getElementById('ltLast');
+  var ema = 60, lastT = performance.now(), frames = 0, acc = 0;
+  function fpsLoop(t) {
+    var d = t - lastT; lastT = t;
+    if (d > 0 && d < 1000) { ema += ((1000 / d) - ema) * 0.06; acc += d; frames++; }
+    if (acc >= 500) { fpsEl.textContent = String(Math.round(ema)); acc = 0; }
+    window.requestAnimationFrame(fpsLoop);
+  }
+  window.requestAnimationFrame(fpsLoop);
+  var ltCount = 0;
+  try {
+    var po = new PerformanceObserver(function (list) {
+      var entries = list.getEntries();
+      for (var i = 0; i < entries.length; i++) {
+        ltCount++;
+        ltLastEl.textContent = Math.round(entries[i].duration) + 'ms';
+      }
+      ltEl.textContent = String(ltCount);
+    });
+    po.observe({ entryTypes: ['longtask'] });
+  } catch (e) { ltEl.textContent = 'n/a'; }
+
+  var initial = (window.location.hash || '').replace('#', '');
+  select(ORDER.indexOf(initial) >= 0 ? initial : ORDER[0]);
+})();
+</script>
+</body>
+</html>
