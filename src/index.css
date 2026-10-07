@@ -479,7 +479,7 @@ h1 em, h2 em { font-style: normal; }
 .figma-icon { width: 14px; height: 14px; flex: 0 0 auto; }
 
 /* ============ GitHub ============ */
-.github-section { padding: var(--section-pad) 0; background: var(--paper-2); color: var(--ink-text); border-bottom: 1px solid var(--ink-line); }
+.github-section { padding: var(--section-pad) 0; background: var(--paper); color: var(--ink-text); border-bottom: 1px solid var(--ink-line); }
 .github-section .section-label { color: var(--ink-muted); }
 .github-section .section-subheading { color: var(--ink-muted); }
 .github-section h2 { color: var(--ink-text); }
@@ -699,7 +699,6 @@ body.timeline-pin-active .section-rail { display: none; }
 .email-button:hover { padding-left: 8px; }
 .email-button .arrow-icon { margin-left: auto; }
 .email-prefix { color: var(--ink-faint); font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.1em; }
-.contact-signoff { margin: 0 0 18px; color: var(--ink-faint); font-family: var(--mono); font-size: var(--text-xs); letter-spacing: 0.08em; }
 .contact-meta { display: flex; align-items: center; justify-content: space-between; gap: 20px; color: var(--ink-muted); font-family: var(--mono); font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.08em; }
 .social-row { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; }
 .social-link { display: inline-flex; align-items: center; gap: 7px; color: var(--ink-muted); font-family: var(--mono); font-size: var(--text-xs); text-decoration: none; text-transform: uppercase; letter-spacing: 0.08em; border-bottom: 1px solid transparent; padding-bottom: 2px; transition: color 0.2s ease, border-color 0.2s ease; }
