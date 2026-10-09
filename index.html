@@ -5,6 +5,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#0A0A0A" />
     <script>
+      // Set before first paint: resolve system/light/dark from storage or
+      // the OS preference so the first render already has the right theme.
+      try {
+        var stored = null;
+        try { stored = localStorage.getItem('jedv-theme'); } catch (e) {}
+        var dark = stored === 'dark' || (stored !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        var root = document.documentElement;
+        root.dataset.theme = dark ? 'dark' : 'light';
+        root.style.colorScheme = dark ? 'dark' : 'light';
+        var meta = document.querySelector('meta[name="theme-color"]');
+        if (meta) meta.setAttribute('content', dark ? '#0A0A0A' : '#f7f6f2');
+      } catch (e) {}
+    </script>
+    <script>
       // Set before first paint: deferred module scripts run too late to stop
       // the browser restoring the previous scroll position on reload.
       try { history.scrollRestoration = 'manual'; } catch (e) {}

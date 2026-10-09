@@ -1,4 +1,5 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, ReactNode, RefObject } from 'react';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
@@ -44,8 +45,62 @@ import { FaWindows, FaDatabase, FaDesktop, FaKey, FaShieldAlt, FaNetworkWired, F
 gsap.registerPlugin(ScrollTrigger, ScrollToPlugin);
 
 type Theme = 'dark' | 'light';
+type ThemeMode = 'system' | 'light' | 'dark';
 type Toast = { id: number; message: string };
 type PaletteCommand = { id: string; label: string; group: string; hint?: string; action: () => void };
+
+const THEME_KEY = 'jedv-theme';
+const THEME_COLORS: Record<Theme, string> = { dark: '#0A0A0A', light: '#f7f6f2' };
+
+// Single theme hook: mode is system/light/dark (default system), resolved
+// is the applied value. Only explicit light/dark persist; system removes
+// the key. SSR-safe: no window access outside effects and guarded reads.
+function useTheme() {
+  const [mode, setMode] = useState<ThemeMode>(() => {
+    if (typeof window === 'undefined') return 'system';
+    try {
+      const stored = window.localStorage.getItem(THEME_KEY);
+      return stored === 'light' || stored === 'dark' ? stored : 'system';
+    } catch {
+      return 'system';
+    }
+  });
+  const [systemDark, setSystemDark] = useState(() => (
+    typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches
+  ));
+  useEffect(() => {
+    const query = window.matchMedia('(prefers-color-scheme: dark)');
+    const onChange = (event: MediaQueryListEvent) => setSystemDark(event.matches);
+    query.addEventListener('change', onChange);
+    return () => query.removeEventListener('change', onChange);
+  }, []);
+  const resolved: Theme = mode === 'system' ? (systemDark ? 'dark' : 'light') : mode;
+  useEffect(() => {
+    const root = document.documentElement;
+    // Swap with transitions suppressed so all surfaces (including those
+    // with hover transitions, like project cards) flip in the same paint
+    // instead of lagging behind. Removed after two frames; hover transitions
+    // after that are unaffected.
+    root.classList.add('theme-instant');
+    root.dataset.theme = resolved;
+    root.style.colorScheme = resolved;
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', THEME_COLORS[resolved]);
+    const raf = window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => root.classList.remove('theme-instant'));
+    });
+    return () => window.cancelAnimationFrame(raf);
+  }, [resolved]);
+  const select = (next: ThemeMode) => {
+    setMode(next);
+    try {
+      if (next === 'system') window.localStorage.removeItem(THEME_KEY);
+      else window.localStorage.setItem(THEME_KEY, next);
+    } catch {
+      // Private mode: keep the choice in memory for this session.
+    }
+  };
+  return { mode, resolved, select };
+}
 
 // All scroll-tracked sections (nav highlights the nearest preceding nav item).
 const sectionOrder = ['hero', 'about', 'skills', 'github', 'projects', 'experience', 'certifications', 'contact'];
@@ -68,24 +123,13 @@ const navItems = [
   { id: 'contact', label: 'Contact' },
 ];
 
-// Rail tone: each tick samples the surface theme of the section behind its
-// own vertical center, so ticks stay contrasted across dark and paper
-// bands (including ticks straddling a boundary). Attribute writes only,
-// no re-render.
+// Rail tone: each tick takes the root theme (every band now follows the
+// color mode, so all ticks agree). Attribute writes only, no re-render.
 function updateRailTones() {
   const ticks = document.querySelectorAll<HTMLElement>('.rail-tick');
   if (!ticks.length) return;
-  const bands = sectionOrder
-    .map((id) => document.getElementById(id))
-    .filter((el): el is HTMLElement => Boolean(el))
-    .map((el) => {
-      const rect = el.getBoundingClientRect();
-      return { top: rect.top, bottom: rect.bottom, tone: el.dataset.theme ?? 'dark' };
-    });
+  const tone = document.documentElement.dataset.theme === 'light' ? 'light' : 'dark';
   ticks.forEach((tick) => {
-    const y = tick.getBoundingClientRect().top + tick.offsetHeight / 2;
-    const band = bands.find((b) => y >= b.top && y <= b.bottom);
-    const tone = band?.tone ?? 'dark';
     if (tick.dataset.tone !== tone) tick.dataset.tone = tone;
   });
 }
@@ -213,8 +257,43 @@ function StatusBadge({ status }: { status: ProjectStatus }) {
   return <span className={`status-badge status-${status.toLowerCase().replace(' ', '-')}`}><span className="status-dot" aria-hidden="true" />{status}</span>;
 }
 
+function ThemeGlyph({ kind }: { kind: ThemeMode }) {
+  const props = { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'square' as const, 'aria-hidden': true };
+  if (kind === 'light') {
+    return <svg {...props}><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M6.3 17.7l-1.4 1.4M19.1 4.9l-1.4 1.4" /></svg>;
+  }
+  if (kind === 'dark') {
+    return <svg {...props}><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" /></svg>;
+  }
+  return <svg {...props}><rect x="2" y="3" width="20" height="13" /><path d="M8 21h8M12 17v4" /></svg>;
+}
+
+function ThemeControl({ mode, onSelect }: { mode: ThemeMode; onSelect: (mode: ThemeMode, el: HTMLElement | null) => void }) {
+  const options: Array<{ id: ThemeMode; label: string }> = [
+    { id: 'system', label: 'System theme' },
+    { id: 'light', label: 'Light theme' },
+    { id: 'dark', label: 'Dark theme' },
+  ];
+  return (
+    <div className="theme-control" role="group" aria-label="Theme">
+      {options.map((option) => (
+        <button
+          key={option.id}
+          type="button"
+          className={`theme-button${mode === option.id ? ' is-selected' : ''}`}
+          aria-label={option.label}
+          aria-pressed={mode === option.id}
+          onClick={(event) => onSelect(option.id, event.currentTarget)}
+        >
+          <ThemeGlyph kind={option.id} />
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function App() {
-  const [theme, setTheme] = useState<Theme>(() => (typeof window !== 'undefined' ? (localStorage.getItem('jedv-theme') as Theme | null) : null) ?? 'dark');
+  const { mode: themeMode, select: selectThemeMode } = useTheme();
   const [activeSection, setActiveSection] = useState('hero');
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -235,17 +314,19 @@ function App() {
   const projectsTriggerRef = useRef<ScrollTrigger | null>(null);
   const deckIndexRef = useRef(0);
   const deckSettleRef = useRef<(() => void) | null>(null);
+  // Filter swap span: scroll + progress captured before setFilter, consumed
+  // by the restore effect after the deck rebuild. Freeze values restore the
+  // section min-height and body anchor the handler overrides.
+  const pendingFilterRestoreRef = useRef<{ y: number; progress: number; wasInside: boolean } | null>(null);
+  const filterFreezeRef = useRef<{ minHeight: string; anchor: string; behavior: string } | null>(null);
   const projectsRefreshRaf = useRef(0);
   const timelineSectionRef = useRef<HTMLElement>(null);  const timelineViewportRef = useRef<HTMLDivElement>(null);
   const timelineTrackRef = useRef<HTMLDivElement>(null);
   const toastId = useRef(0);
-  // Mouse presses activate filters on pointerdown (not click), so a press
-  // still counts when the page is moving under the cursor at release
-  // (momentum + snap tail after a fling: down/up land on different
-  // targets and the click is lost). Touch, pen, keyboard and screen
-  // readers keep standard click activation; the flag below consumes the
-  // mouse click that follows its own pointerdown so it never double-fires.
-  const filterPressRef = useRef(false);
+  // Active theme-switch view transition, if any. A new toggle skips it
+  // first so rapid clicks never stack and the switching attribute below
+  // cannot get stuck.
+  const transitionRef = useRef<ViewTransition | null>(null);
   const visibleProjects = projects.filter((project) => filter === 'All' || project.status === filter);
   // Mirror for handlers that must see the current dialog project without
   // re-subscribing (global Esc): plain ref read at call time, never stale.
@@ -288,11 +369,59 @@ function App() {
     setPaletteOpen(false);
   };
 
-  const toggleTheme = () => {
-    const nextTheme = theme === 'dark' ? 'light' : 'dark';
-    setTheme(nextTheme);
-    localStorage.setItem('jedv-theme', nextTheme);
-    notify('Theme switched');
+  const applyTheme = (next: ThemeMode, anchor?: HTMLElement | 'center' | null) => {
+    const run = () => {
+      selectThemeMode(next);
+      notify(`Theme: ${next}`);
+    };
+    // Explicit toggle clicks only: OS-driven system changes and first
+    // load flow through the theme effect instead and stay instant.
+    if (
+      typeof document === 'undefined' ||
+      typeof document.startViewTransition !== 'function' ||
+      reducedMotion
+    ) {
+      run();
+      return;
+    }
+    const root = document.documentElement;
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    let from: string;
+    if (anchor instanceof HTMLElement) {
+      const rect = anchor.getBoundingClientRect();
+      from = `inset(${Math.max(0, rect.top)}px ${Math.max(0, viewportWidth - rect.right)}px ${Math.max(0, viewportHeight - rect.bottom)}px ${Math.max(0, rect.left)}px)`;
+    } else {
+      from = `inset(${viewportHeight / 2}px ${viewportWidth / 2}px ${viewportHeight / 2}px ${viewportWidth / 2}px)`;
+    }
+    try {
+      transitionRef.current?.skipTransition();
+    } catch {
+      // A finished transition has nothing to skip.
+    }
+    root.setAttribute('data-theme-switching', '');
+    root.style.setProperty('--theme-wipe-from', from);
+    let transition: ViewTransition;
+    try {
+      transition = document.startViewTransition(() => {
+        flushSync(() => selectThemeMode(next));
+      });
+    } catch {
+      root.removeAttribute('data-theme-switching');
+      run();
+      return;
+    }
+    transitionRef.current = transition;
+    notify(`Theme: ${next}`);
+    const settle = () => {
+      if (transitionRef.current === transition) {
+        transitionRef.current = null;
+        root.removeAttribute('data-theme-switching');
+        const applied = root.dataset.theme === 'light' ? 'light' : 'dark';
+        document.querySelector('meta[name="theme-color"]')?.setAttribute('content', THEME_COLORS[applied]);
+      }
+    };
+    transition.finished.then(settle, settle);
   };
 
   const copyEmail = async () => {
@@ -322,81 +451,49 @@ function App() {
     window.setTimeout(() => setResumeState('idle'), 3200);
   };
 
-  // Filter change behaves like a fresh start, in strict order:
-  // 1. absolute top from the section element itself (never a killed ST).
-  // On the desktop deck the reset target is the pin line itself (frame top
-  // at viewport top, exactly the pinned look, progress 0, first card);
-  // everywhere else the target clears the sticky header. The old code used
-  // the header-cleared target on desktop too, which sat ~69px lower than
-  // the pinned heading and read as a layout jump.
-  // 2. freeze the document height at its current rendered value, so the
-  // pin-spacer collapse cannot shift anything below mid-change (this also
-  // starves scroll anchoring: nothing moves, so no anchor adjustment fires);
-  // 3. instant jump with CSS smooth killed for this call only;
-  // 4. AFTER the jump's scroll event has been processed, swap the list,
-  // revert/rebuild the pin, reset deck state;
-  // 5. after the DOM updates: refresh, scroll to the NEW trigger's start
-  // (st.start, derived from PROJECTS_PIN_START, so reset and pin agree by
-  // construction), release the freeze, refresh again, assert the start
-  // LAST, then restore smooth.
-  // Why the deferral in step 4 (traced root cause): ScrollTrigger caches
-  // the scroller position and refresh() records it, then restores it at
-  // the end. The cache only goes fresh in ScrollTrigger's native scroll
-  // listener, which runs as a later task. Committing synchronously in the
-  // click handler rebuilds before that task, so the rebuild refresh
-  // records the stale pre-jump value and scrolls back to it (traced:
-  // refresh restoring the old Y, then clamping to max scroll). Waiting two
-  // frames guarantees the cache holds the post-jump position first.
-  const handleFilterChange = (option: 'All' | ProjectStatus) => {
+  // Filter change never moves the page. There is no scroll to the section
+  // top and no scroll to the rebuilt trigger start: the handler only
+  // captures scrollY + deck progress, freezes the section height so the
+  // pin-spacer teardown cannot collapse the document, swaps the list, and
+  // lets the [filter] layout effect below revert/rebuild the pin. The
+  // restore effect after it re-seats scroll (progress-mapped inside the
+  // pin, same scrollY outside it) with instant jumps only.
+  // Re-entry is safe and needs no suppression flag: a repeated call for
+  // the selected option returns right after focus. A flag would stick: this
+  // handler commits synchronously during pointerdown, the pin teardown moves
+  // layout under the cursor, mouseup can land off the button so no click
+  // ever arrives to consume the flag, and the stale flag would then swallow
+  // the next keyboard or assistive click.
+  const handleFilterChange = (option: 'All' | ProjectStatus, el?: HTMLElement | null) => {
+    if (el) el.focus({ preventScroll: true });
     if (option === filter) return;
     const section = document.getElementById('projects');
     if (!section) {
       setFilter(option);
       return;
     }
-    const desktopDeck = isDesktopDeck();
-    const headerOffset = Math.ceil(document.querySelector('.site-header')?.getBoundingClientRect().height ?? 69);
-    const sectionTop = section.getBoundingClientRect().top + window.scrollY;
-    const preTop = desktopDeck ? sectionTop : sectionTop - headerOffset + 1;
+    const st = projectsTriggerRef.current;
+    const savedY = window.scrollY;
+    const progress = Math.min(1, Math.max(0, st ? st.progress : 0));
+    const wasInside = !!st && isDesktopDeck() && savedY >= st.start - 2 && savedY <= st.end + 2;
+    pendingFilterRestoreRef.current = { y: savedY, progress, wasInside };
+    filterFreezeRef.current = {
+      minHeight: section.style.minHeight,
+      anchor: document.body.style.overflowAnchor,
+      behavior: document.documentElement.style.scrollBehavior,
+    };
     // border-box is global, so minHeight matches the rendered height exactly.
-    const prevMinHeight = section.style.minHeight;
     section.style.minHeight = `${section.offsetHeight}px`;
     // Page-wide anchor kill for the swap window (the projects-section rule
     // alone cannot suppress anchors living in later sections).
-    const prevAnchor = document.body.style.overflowAnchor;
     document.body.style.overflowAnchor = 'none';
-    const html = document.documentElement;
-    const prevBehavior = html.style.scrollBehavior;
-    html.style.scrollBehavior = 'auto';
-    window.scrollTo({ top: preTop, behavior: 'auto' });
-    ScrollTrigger.clearScrollMemory();
-    window.requestAnimationFrame(() => {
-      window.requestAnimationFrame(() => {
-        deckIndexRef.current = 0;
-        closeInspectionRef.current(false);
-        setFilter(option);
-        window.requestAnimationFrame(() => {
-          window.requestAnimationFrame(() => {
-            ScrollTrigger.refresh();
-            // Rebuilt trigger wins when there is one; otherwise re-derive
-            // the section top (frozen layout may have shifted it) with the
-            // same desktop/mobile rule as the pre-jump.
-            const st = projectsTriggerRef.current;
-            const freshTop = section.getBoundingClientRect().top + window.scrollY;
-            const target = st ? st.start : (desktopDeck ? freshTop : freshTop - headerOffset + 1);
-            window.scrollTo({ top: target, behavior: 'auto' });
-            section.style.minHeight = prevMinHeight;
-            ScrollTrigger.clearScrollMemory();
-            ScrollTrigger.refresh();
-            const st2 = projectsTriggerRef.current;
-            const freshTop2 = section.getBoundingClientRect().top + window.scrollY;
-            window.scrollTo({ top: st2 ? st2.start : (desktopDeck ? freshTop2 : freshTop2 - headerOffset + 1), behavior: 'auto' });
-            document.body.style.overflowAnchor = prevAnchor;
-            html.style.scrollBehavior = prevBehavior;
-          });
-        });
-      });
-    });
+    // scrollTo with behavior auto would follow the CSS smooth rule, and so
+    // would ScrollTrigger.refresh internal restores: force instant for the
+    // swap window so every jump below stays a single step.
+    document.documentElement.style.scrollBehavior = 'auto';
+    deckIndexRef.current = 0;
+    closeInspectionRef.current(false);
+    setFilter(option);
   };
 
   const openProject = (project: Project) => {
@@ -428,10 +525,6 @@ function App() {
   };
   const closeInspectionRef = useRef(closeInspection);
   closeInspectionRef.current = closeInspection;
-
-  useEffect(() => {
-    document.documentElement.dataset.theme = theme;
-  }, [theme]);
 
   // STEP 2: keep --header-h in sync with the real sticky header height.
   // 69px CSS fallback covers pre-JS / no-header cases. Refresh pins once
@@ -1084,6 +1177,50 @@ function App() {
     };
   }, [filter]);
 
+  // Restore scroll after a filter swap without a visible shift. Declared
+  // after the deck rebuild above so it runs later in the same commit, still
+  // pre-paint, and no frame ever shows the unrestored position. Inside the
+  // pin: land on the same relative progress of the new range, so the pinned
+  // frame sits exactly where it was. Outside it: keep the same scrollY,
+  // clamped to the new document height. Mount-safe: pending is null until
+  // a filter click sets it.
+  useLayoutEffect(() => {
+    const saved = pendingFilterRestoreRef.current;
+    pendingFilterRestoreRef.current = null;
+    if (!saved) return;
+    const section = document.getElementById('projects');
+    const freeze = filterFreezeRef.current;
+    filterFreezeRef.current = null;
+    if (section && freeze) section.style.minHeight = freeze.minHeight;
+    document.body.style.overflowAnchor = freeze ? freeze.anchor : '';
+    if (freeze) document.documentElement.style.scrollBehavior = freeze.behavior;
+    ScrollTrigger.refresh();
+    const st = projectsTriggerRef.current;
+    const maxY = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+    let target = saved.y;
+    if (saved.wasInside && st && isDesktopDeck()) {
+      target = st.start + saved.progress * (st.end - st.start);
+    }
+    if (st && isDesktopDeck()) {
+      // Any landing strictly inside the new pin range is rounded to the
+      // nearest card slot, so the shown card is exact and the deck snap
+      // has nothing left to drift toward. Landings outside the range keep
+      // the same scrollY untouched.
+      const count = projectListRef.current?.querySelectorAll('.project-card').length ?? 0;
+      const span = st.end - st.start;
+      if (count > 1 && span > 0 && target > st.start + 2 && target < st.end - 2) {
+        const slot = Math.round(((target - st.start) / span) * (count - 1));
+        target = st.start + (slot / (count - 1)) * span;
+      }
+    }
+    target = Math.min(Math.max(0, target), maxY);
+    if (Math.abs(window.scrollY - target) > 1) {
+      window.scrollTo({ top: target, behavior: 'instant' as ScrollBehavior });
+      ScrollTrigger.update();
+    }
+    if (isDesktopDeck()) deckSettleRef.current?.();
+  }, [filter]);
+
   // Native horizontal-scroll timeline progress (mobile / touch / reduced
   // motion). The pinned GSAP ScrollTrigger above only exists on
   // min-width:701px + hover:hover + fine pointer — everywhere else the
@@ -1222,7 +1359,9 @@ function App() {
   const commands: PaletteCommand[] = [
     ...navItems.map((item) => ({ id: `jump-${item.id}`, label: item.label, group: 'Jump to', hint: `/${item.id}`, action: () => scrollToSection(item.id, item.label) })),
     { id: 'jump-skills', label: 'Skills', group: 'Jump to', hint: '/skills', action: () => scrollToSection('skills', 'Skills') },
-    { id: 'theme', label: `Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`, group: 'Actions', hint: 'theme', action: toggleTheme },
+    { id: 'theme-system', label: 'Theme: System', group: 'Actions', hint: 'theme', action: () => applyTheme('system', 'center') },
+    { id: 'theme-light', label: 'Theme: Light', group: 'Actions', hint: 'theme', action: () => applyTheme('light', 'center') },
+    { id: 'theme-dark', label: 'Theme: Dark', group: 'Actions', hint: 'theme', action: () => applyTheme('dark', 'center') },
     { id: 'copy-email', label: 'Copy email address', group: 'Actions', hint: 'copy', action: copyEmail },
     { id: 'download-resume', label: 'Download résumé', group: 'Actions', hint: 'save', action: downloadResume },
     ...projects.map((project) => ({ id: `project-${project.id}`, label: project.title, group: 'Projects', hint: project.status, action: () => openProject(project) })),
@@ -1249,7 +1388,7 @@ function App() {
     <div className="site-shell">
       <div className="noise-layer" aria-hidden="true" />
       <SectionRail activeSection={activeSection} scrollToSection={scrollToSection} />
-      <Header activeSection={activeSection} mobileNavOpen={mobileNavOpen} setMobileNavOpen={setMobileNavOpen} openPalette={() => setPaletteOpen(true)} scrollToSection={scrollToSection} />
+      <Header activeSection={activeSection} mobileNavOpen={mobileNavOpen} setMobileNavOpen={setMobileNavOpen} openPalette={() => setPaletteOpen(true)} scrollToSection={scrollToSection} themeMode={themeMode} onTheme={applyTheme} />
 
       {route.kind === 'missing' ? (
       <main aria-label="Not found">
@@ -1258,7 +1397,7 @@ function App() {
       ) : (
       <main>
         <ErrorBoundary name="Hero" variant="section">
-        <section className="hero-section" data-theme={theme === 'dark' ? 'dark' : 'light'} id="hero" aria-labelledby="hero-title">
+        <section className="hero-section" id="hero" aria-labelledby="hero-title">
           <div className="hero-grid" aria-hidden="true" />
           <div className="container hero-content">
             <div className="hero-copy reveal-on-load">
@@ -1279,7 +1418,7 @@ function App() {
         </ErrorBoundary>
 
         <ErrorBoundary name="About" variant="section">
-        <section className="paper-section about-section" data-theme="light" id="about" aria-labelledby="about-title">
+        <section className="about-section" id="about" aria-labelledby="about-title">
           <div className="container">
             <div className="section-heading-row">
               <div><h2 id="about-title">What I do &amp;<br /><em>how I work</em></h2></div>
@@ -1294,7 +1433,7 @@ function App() {
         </ErrorBoundary>
 
         <ErrorBoundary name="Skills" variant="section">
-        <section className="paper-section stack-section" data-theme="light" id="skills" aria-labelledby="skills-title">
+        <section className="stack-section" id="skills" aria-labelledby="skills-title">
           <div className="container">
             <div className="section-heading-row">
               <div><h2 id="skills-title">Stack<br /><em>inventory</em></h2></div>
@@ -1309,11 +1448,11 @@ function App() {
         </ErrorBoundary>
 
         <ErrorBoundary name="Projects" variant="section">
-        <section className="ink-section projects-section" data-theme={theme === 'dark' ? 'dark' : 'light'} id="projects" aria-labelledby="projects-title">
+        <section className="ink-section projects-section" id="projects" aria-labelledby="projects-title">
             <div ref={projectsFrameRef} className="container projects-pin-frame">
               <div className="projects-intro">
               <div className="section-heading-row projects-heading"><div><h2 id="projects-title">Production systems<br /><em>I’ve built</em></h2></div><div className="heading-side"><SectionLabel>Featured Projects</SectionLabel><p className="section-subheading">Evidence over adjectives.<br />Open a case file.</p></div></div>
-              </div><div className="filter-bar" role="tablist" aria-label="Filter projects by status">{filters.map((option) => <button key={option} className={`filter-button ${filter === option ? 'is-selected' : ''}`} role="tab" aria-selected={filter === option} onPointerDown={(event) => { if (event.pointerType === 'mouse') { filterPressRef.current = true; handleFilterChange(option); } }} onClick={() => { if (filterPressRef.current) filterPressRef.current = false; else handleFilterChange(option); }}><span className="filter-count">{option === 'All' ? projects.length : projects.filter((project) => project.status === option).length}</span>{option}</button>)}</div><div className="projects-scroll-stage" ref={projectsStageRef}><div className="project-list project-deck" ref={projectListRef}>{visibleProjects.map((project) => <ProjectCard key={project.id} project={project} inspectProject={openInspection} />)}{visibleProjects.length === 0 && <EmptyDeckCard resetFilter={() => handleFilterChange('All')} />}</div></div>
+              </div><div className="filter-bar" role="tablist" aria-label="Filter projects by status">{filters.map((option) => <button key={option} className={`filter-button ${filter === option ? 'is-selected' : ''}`} role="tab" aria-selected={filter === option} onPointerDown={(event) => { if (event.pointerType === 'mouse') handleFilterChange(option, event.currentTarget); }} onClick={(event) => handleFilterChange(option, event.currentTarget)}><span className="filter-count">{option === 'All' ? projects.length : projects.filter((project) => project.status === option).length}</span>{option}</button>)}</div><div className="projects-scroll-stage" ref={projectsStageRef}><div className="project-list project-deck" ref={projectListRef}>{visibleProjects.map((project) => <ProjectCard key={project.id} project={project} inspectProject={openInspection} />)}{visibleProjects.length === 0 && <EmptyDeckCard resetFilter={() => handleFilterChange('All')} />}</div></div>
 </div>
         </section>
         </ErrorBoundary>
@@ -1323,11 +1462,11 @@ function App() {
         </ErrorBoundary>
 
         <ErrorBoundary name="Certifications" variant="section">
-        <CertificationsSection theme={theme} />
+        <CertificationsSection />
         </ErrorBoundary>
 
         <ErrorBoundary name="Contact" variant="section">
-        <section className="contact-section" data-theme="light" id="contact" aria-labelledby="contact-title">
+        <section className="contact-section" id="contact" aria-labelledby="contact-title">
           <div className="container contact-layout"><div><h2 id="contact-title">Let’s talk about<br /><em>your system</em></h2></div><div className="contact-copy"><p>If you have a system that needs shipping, email me with what it has to do and when it has to work.</p><button className="email-button" onClick={copyEmail} aria-label={`Copy ${email}`}><span className="email-prefix">mailto://</span>{email}<ArrowUpRight /></button><div className="contact-meta"><span>Nasugbu, Batangas, Philippines</span><div className="social-row" aria-label="Social links"><a className="social-link" href="https://github.com/23-74173-cpu" target="_blank" rel="noreferrer"><SocialIcon network="github" />GitHub</a><a className="social-link" href="https://web.facebook.com/joed.devilla/" target="_blank" rel="noreferrer"><SocialIcon network="facebook" />Facebook</a><a className="social-link" href="https://www.linkedin.com/in/john-eduard-de-villa-78689935a/" target="_blank" rel="noreferrer"><SocialIcon network="linkedin" />LinkedIn</a></div></div><button className="resume-button" onClick={downloadResume}>{resumeState === 'preparing' ? 'Preparing…' : resumeState === 'saved' ? '✓ Saved' : 'Download Résumé'}<ArrowUpRight /></button></div></div>
         </section>
         </ErrorBoundary>
@@ -1363,8 +1502,9 @@ function SectionRail({ activeSection, scrollToSection }: { activeSection: string
   );
 }
 
-function Header({ activeSection, mobileNavOpen, setMobileNavOpen, openPalette, scrollToSection }: { activeSection: string; mobileNavOpen: boolean; setMobileNavOpen: (open: boolean) => void; openPalette: () => void; scrollToSection: (id: string, label: string) => void }) {
-  return <header className="site-header"><div className="container header-inner"><button className="wordmark" onClick={() => scrollToSection('about', 'About')} aria-label="Go to top">JEDV<span className="wordmark-cursor">_</span></button><nav className="desktop-nav" aria-label="Primary navigation">{navItems.map((item) => <button key={item.id} className={activeSection === item.id ? 'active' : ''} onClick={() => scrollToSection(item.id, item.label)}>{item.label}</button>)}</nav><div className="header-actions"><button className="jump-button" onClick={openPalette}>Jump <kbd>⌘K</kbd></button><button className="mobile-menu-button" aria-expanded={mobileNavOpen} aria-controls="mobile-nav" onClick={() => setMobileNavOpen(!mobileNavOpen)}><span className="sr-only">{mobileNavOpen ? 'Close menu' : 'Open menu'}</span><span className="menu-lines" aria-hidden="true"><i /><i /></span></button></div></div>{mobileNavOpen && <nav id="mobile-nav" className="mobile-nav" aria-label="Mobile navigation">{navItems.map((item) => <button key={item.id} className={activeSection === item.id ? 'active' : ''} onClick={() => scrollToSection(item.id, item.label)}>{item.label}<ArrowUpRight /></button>)}<button onClick={openPalette}>Open command palette <kbd>⌘K</kbd></button></nav>}</header>;
+function Header({ activeSection, mobileNavOpen, setMobileNavOpen, openPalette, scrollToSection, themeMode, onTheme }: { activeSection: string; mobileNavOpen: boolean; setMobileNavOpen: (open: boolean) => void; openPalette: () => void; scrollToSection: (id: string, label: string) => void; themeMode: ThemeMode; onTheme: (mode: ThemeMode, anchor?: HTMLElement | 'center' | null) => void }) {
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
+  return <header className="site-header"><div className="container header-inner"><button className="wordmark" onClick={() => scrollToSection('about', 'About')} aria-label="Go to top">JEDV<span className="wordmark-cursor">_</span></button><nav className="desktop-nav" aria-label="Primary navigation">{navItems.map((item) => <button key={item.id} className={activeSection === item.id ? 'active' : ''} onClick={() => scrollToSection(item.id, item.label)}>{item.label}</button>)}</nav><div className="header-actions"><ThemeControl mode={themeMode} onSelect={(mode, el) => onTheme(mode, el)} /><button className="jump-button" onClick={openPalette}>Jump <kbd>⌘K</kbd></button><button ref={menuButtonRef} className="mobile-menu-button" aria-expanded={mobileNavOpen} aria-controls="mobile-nav" onClick={() => setMobileNavOpen(!mobileNavOpen)}><span className="sr-only">{mobileNavOpen ? 'Close menu' : 'Open menu'}</span><span className="menu-lines" aria-hidden="true"><i /><i /></span></button></div></div>{mobileNavOpen && <nav id="mobile-nav" className="mobile-nav" aria-label="Mobile navigation">{navItems.map((item) => <button key={item.id} className={activeSection === item.id ? 'active' : ''} onClick={() => scrollToSection(item.id, item.label)}>{item.label}<ArrowUpRight /></button>)}<button onClick={openPalette}>Open command palette <kbd>⌘K</kbd></button><div className="mobile-theme-row"><span>Theme</span><ThemeControl mode={themeMode} onSelect={(mode) => onTheme(mode, menuButtonRef.current)} /></div></nav>}</header>;
 }
 
 function HeroPortrait({ variant }: { variant: 'side' | 'inline' }) {
@@ -1397,8 +1537,71 @@ function HeroPortrait({ variant }: { variant: 'side' | 'inline' }) {
 
 function GitHubActivity() {
   const [chartFailed, setChartFailed] = useState(false);
+  // Contribution cells embedded at build time (see scripts/prerender.mjs):
+  // [column, row, level 0-4, date, count]. Null on SSR or when the build
+  // fetch failed, in which case the upstream image is used instead.
+  const chartData = useMemo(() => {
+    if (typeof document === 'undefined') return null;
+    try {
+      const node = document.getElementById('gh-data');
+      if (!node || !node.textContent) return null;
+      const parsed = JSON.parse(node.textContent) as {
+        total: number; start: string; end: string; cells: Array<[number, number, number, string, number]>;
+      };
+      if (!Array.isArray(parsed.cells) || parsed.cells.length === 0) return null;
+      return parsed;
+    } catch {
+      return null;
+    }
+  }, []);
+  // GitHub pitch: 10px squares, 3px gaps, square corners. Month labels sit
+  // in the top strip, weekday labels in the left gutter.
+  const chartLayout = useMemo(() => {
+    if (!chartData) return null;
+    const step = 13;
+    const size = 10;
+    const x0 = 32;
+    const y0 = 24;
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const maxCol = chartData.cells.reduce((max, cell) => Math.max(max, cell[0]), 0);
+    const colMonth = new Map<number, number>();
+    chartData.cells.forEach(([col, , , date]) => {
+      if (!colMonth.has(col)) colMonth.set(col, Number(date.slice(5, 7)) - 1);
+    });
+    const months: Array<{ col: number; text: string }> = [];
+    let lastMonth = -1;
+    let lastCol = -99;
+    for (let col = 0; col <= maxCol; col += 1) {
+      const month = colMonth.get(col);
+      if (month === undefined) continue;
+      if (month !== lastMonth && col - lastCol >= 3) {
+        months.push({ col, text: monthNames[month] });
+        lastMonth = month;
+        lastCol = col;
+      }
+    }
+    return {
+      step, size, x0, y0,
+      width: x0 + maxCol * step + size + 14,
+      height: y0 + 6 * step + size + 8,
+      months,
+      weekdays: [
+        { row: 1, text: 'Mon' },
+        { row: 3, text: 'Wed' },
+        { row: 5, text: 'Fri' },
+      ],
+    };
+  }, [chartData]);
+  const formatCellDate = (date: string) => {
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const parts = date.split('-');
+    return `${monthNames[Number(parts[1]) - 1]} ${Number(parts[2])}`;
+  };
+  const formatCellCount = (count: number) => (
+    count <= 0 ? 'No contributions' : count === 1 ? '1 contribution' : `${count} contributions`
+  );
   return (
-      <section className="github-section" data-theme="light" id="github" aria-labelledby="github-title">
+      <section className="github-section" id="github" aria-labelledby="github-title">
       <div className="container">
         <div className="section-heading-row">
           <div><h2 id="github-title">Commit<br /><em>activity</em></h2></div>
@@ -1416,6 +1619,55 @@ function GitHubActivity() {
                   <span>Contribution chart unavailable offline.</span>
                   <a href="https://github.com/23-74173-cpu" target="_blank" rel="noreferrer">View profile ↗</a>
                 </div>
+              ) : chartData && chartLayout ? (
+                <a href="https://github.com/23-74173-cpu" target="_blank" rel="noreferrer" aria-label={`View GitHub profile, ${chartData.total} contributions from ${chartData.start} to ${chartData.end}`}>
+                  {/* Width and height attrs reserve the exact ratio before
+                      paint, so pin starts below this section never shift. */}
+                  <svg
+                    className="github-chart-svg no-copy-img"
+                    viewBox={`0 0 ${chartLayout.width} ${chartLayout.height}`}
+                    width={chartLayout.width}
+                    height={chartLayout.height}
+                    role="img"
+                    aria-label={`${chartData.total} contributions from ${chartData.start} to ${chartData.end}`}
+                  >
+                    {chartLayout.months.map((month) => (
+                      <text
+                        key={`m${month.col}`}
+                        className="gh-axis"
+                        x={chartLayout.x0 + month.col * chartLayout.step}
+                        y="13"
+                      >
+                        {month.text}
+                      </text>
+                    ))}
+                    {chartLayout.weekdays.map((day) => (
+                      <text
+                        key={day.text}
+                        className="gh-axis"
+                        x={chartLayout.x0 - 6}
+                        y={chartLayout.y0 + day.row * chartLayout.step + chartLayout.size / 2}
+                        textAnchor="end"
+                        dominantBaseline="central"
+                      >
+                        {day.text}
+                      </text>
+                    ))}
+                    {chartData.cells.map(([col, row, level, date, count]) => (
+                      <rect
+                        key={date}
+                        className="gh-cell"
+                        data-level={Math.min(4, Math.max(0, level))}
+                        x={chartLayout.x0 + col * chartLayout.step}
+                        y={chartLayout.y0 + row * chartLayout.step}
+                        width={chartLayout.size}
+                        height={chartLayout.size}
+                      >
+                        <title>{`${formatCellCount(count)} on ${formatCellDate(date)}`}</title>
+                      </rect>
+                    ))}
+                  </svg>
+                </a>
               ) : (
                 <a href="https://github.com/23-74173-cpu" target="_blank" rel="noreferrer" aria-label="View GitHub profile">
                   <img
@@ -1438,6 +1690,15 @@ function GitHubActivity() {
                 </a>
               )}
             </div>
+            {chartData && chartLayout && !chartFailed && (
+              <div className="github-legend" aria-hidden="true">
+                <span>Less</span>
+                {[0, 1, 2, 3, 4].map((level) => (
+                  <i key={level} className="gh-swatch" data-level={level} />
+                ))}
+                <span>More</span>
+              </div>
+            )}
           </div>
           <div className="github-meta">
             <span>github.com/23-74173-cpu</span>
@@ -1459,7 +1720,7 @@ function SkillGroup({ label, items }: { label: string; items: SkillItem[] }) {
     const style = item.brand
       ? ({ '--brand': item.brand, ...(item.brandDark ? { '--brand-dark': item.brandDark } : {}) } as CSSProperties)
       : undefined;
-    return <span className="skill-pill" key={item.name} style={style}><SkillIcon name={item.name} />{item.name}</span>;
+    return <span className={item.brand ? 'skill-pill' : 'skill-pill no-brand'} key={item.name} style={style}><SkillIcon name={item.name} />{item.name}</span>;
   })}</div></div>;
 }
 
@@ -1482,10 +1743,10 @@ function EmptyDeckCard({ resetFilter }: { resetFilter: () => void }) {
 const timelineOrdered = [...timeline].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
 
 function TimelineSection({ scrollToSection, sectionRef, viewportRef, trackRef }: { scrollToSection: (id: string, label: string) => void; sectionRef: RefObject<HTMLElement | null>; viewportRef: RefObject<HTMLDivElement | null>; trackRef: RefObject<HTMLDivElement | null> }) {
-  return <section ref={sectionRef} className="paper-section timeline-section" data-theme="light" id="experience" aria-labelledby="experience-title"><div className="container"><div className="section-heading-row"><h2 id="experience-title">Timeline</h2><div className="heading-side"><SectionLabel>Experience</SectionLabel><p className="section-subheading timeline-hint">Scroll horizontally <span aria-hidden="true">→</span></p></div></div><div className="timeline-badges"><span>Education</span><span>Freelance</span></div><div className="timeline-viewport" ref={viewportRef} dir="ltr"><div className="timeline-track" ref={trackRef}><div className="timeline-progress" aria-hidden="true" /><div className="timeline-start" aria-hidden="true" />{timelineOrdered.map((entry, index) => <article className="timeline-entry" data-state={index === 0 ? 'current' : 'upcoming'} key={`${entry.date}-${entry.title}`}><div className="timeline-year">{entry.year}</div><div className="timeline-entry-body"><span className={`timeline-badge badge-${entry.badge.toLowerCase()}`}>{entry.badge}</span><h3>{entry.title}</h3><p className="timeline-role">{entry.role} <span>·</span> {entry.organization}</p><p>{entry.description}</p></div></article>)}<div className="timeline-end" aria-hidden="true"><span className="timeline-end-square" /><span className="timeline-end-label">NOW</span></div></div></div><div className="timeline-footer"><button className="timeline-cta" onClick={() => scrollToSection('contact', 'Contact')}>Start a conversation <ArrowUpRight /></button><span className="timeline-counter" data-timeline-counter aria-hidden="true">01 / {String(timelineOrdered.length).padStart(2, '0')}</span></div></div></section>;
+  return <section ref={sectionRef} className="timeline-section" id="experience" aria-labelledby="experience-title"><div className="container"><div className="section-heading-row"><h2 id="experience-title">Timeline</h2><div className="heading-side"><SectionLabel>Experience</SectionLabel><p className="section-subheading timeline-hint">Scroll horizontally <span aria-hidden="true">→</span></p></div></div><div className="timeline-badges"><span>Education</span><span>Freelance</span></div><div className="timeline-viewport" ref={viewportRef} dir="ltr"><div className="timeline-track" ref={trackRef}><div className="timeline-progress" aria-hidden="true" /><div className="timeline-start" aria-hidden="true" />{timelineOrdered.map((entry, index) => <article className="timeline-entry" data-state={index === 0 ? 'current' : 'upcoming'} key={`${entry.date}-${entry.title}`}><div className="timeline-year">{entry.year}</div><div className="timeline-entry-body"><span className={`timeline-badge badge-${entry.badge.toLowerCase()}`}>{entry.badge}</span><h3>{entry.title}</h3><p className="timeline-role">{entry.role} <span>·</span> {entry.organization}</p><p>{entry.description}</p></div></article>)}<div className="timeline-end" aria-hidden="true"><span className="timeline-end-square" /><span className="timeline-end-label">NOW</span></div></div></div><div className="timeline-footer"><button className="timeline-cta" onClick={() => scrollToSection('contact', 'Contact')}>Start a conversation <ArrowUpRight /></button><span className="timeline-counter" data-timeline-counter aria-hidden="true">01 / {String(timelineOrdered.length).padStart(2, '0')}</span></div></div></section>;
 }
 
-function CertificationsSection({ theme }: { theme: Theme }) {
+function CertificationsSection() {
   const [activeCert, setActiveCert] = useState<{ issuer: string; label: string; image: string; issued?: string } | null>(null);
 
   useEffect(() => {
@@ -1497,7 +1758,7 @@ function CertificationsSection({ theme }: { theme: Theme }) {
     return () => { window.removeEventListener('keydown', onKey); document.body.style.overflow = prevOverflow; };
   }, [activeCert]);
 
-  return <><section className="ink-section certifications-section" data-theme={theme === 'dark' ? 'dark' : 'light'} id="certifications" aria-labelledby="certifications-title"><div className="container"><div className="section-heading-row"><h2 id="certifications-title">Industry<br /><em>credentials</em></h2></div><div className="certification-grid">{certifications.map((certification) => <article className="certification-card" key={certification.issuer}><h3>{certification.issuer}</h3><ul>{certification.items.map((item) => <li key={item.label}><button type="button" className="cert-item-button" onClick={() => setActiveCert({ issuer: certification.issuer, label: item.label, image: item.image, issued: item.issued })} aria-haspopup="dialog"><span aria-hidden="true">↳</span>{item.label}</button></li>)}</ul><div className="certification-seal" aria-hidden="true">VERIFIED<br />FIELD<br />SIGNAL</div></article>)}</div></div></section>
+  return <><section className="ink-section certifications-section" id="certifications" aria-labelledby="certifications-title"><div className="container"><div className="section-heading-row"><h2 id="certifications-title">Industry<br /><em>credentials</em></h2></div><div className="certification-grid">{certifications.map((certification) => <article className="certification-card" key={certification.issuer}><h3>{certification.issuer}</h3><ul>{certification.items.map((item) => <li key={item.label}><button type="button" className="cert-item-button" onClick={() => setActiveCert({ issuer: certification.issuer, label: item.label, image: item.image, issued: item.issued })} aria-haspopup="dialog"><span aria-hidden="true">↳</span>{item.label}</button></li>)}</ul><div className="certification-seal" aria-hidden="true">VERIFIED<br />FIELD<br />SIGNAL</div></article>)}</div></div></section>
   {activeCert && <CertModal cert={activeCert} close={() => setActiveCert(null)} />}</>;
 }
 

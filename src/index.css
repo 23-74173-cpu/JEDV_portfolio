@@ -9,6 +9,7 @@
   font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
+  color-scheme: light dark;
 
   /* Base (dark mode default) */
   --bg: #0A0A0A;
@@ -16,23 +17,27 @@
   --surface-2: #171716;
   --text: #F2F0E8;
   --text-muted: #A3A39B;
-  --text-faint: #6E6E68;
+  --text-faint: #84847C;
   --border: rgba(242, 240, 232, 0.14);
   --border-strong: rgba(242, 240, 232, 0.38);
+  --hairline: rgba(242, 240, 232, 0.14);
   --solid-shadow: rgba(0, 0, 0, 0.55);
 
-  /* Light sections (editorial paper) — fixed in both themes */
+  /* Fixed inks for rail ticks (mode-invariant by design) */
   --paper: #F2F0E8;
-  --paper-2: #E7E4D7;
   --ink-text: #131311;
-  --ink-muted: #61615b;
-  --ink-faint: #9b9b93;
-  --ink-line: #D5D2C6;
-  --ink-line-strong: #131311;
 
   /* Inverse (buttons, badges) */
   --inverse-bg: #F2F0E8;
   --inverse-text: #0A0A0A;
+
+  /* Contribution chart (GitHub dark): empty is a visible grid step
+     above the card, greens run mid to bright. */
+  --chart-empty: #151b23;
+  --chart-l1: #033a16;
+  --chart-l2: #196c2e;
+  --chart-l3: #2ea043;
+  --chart-l4: #56d364;
 
   /* Accent — acid lime, restricted to ::selection, .status-active,
      and error/fault signaling. All decorative chrome uses --text. */
@@ -77,9 +82,10 @@
   --surface-2: #edebe4;
   --text: #131311;
   --text-muted: #5e5e59;
-  --text-faint: #97978f;
+  --text-faint: #6E6E66;
   --border: rgba(19, 19, 17, 0.16);
   --border-strong: rgba(19, 19, 17, 0.45);
+  --hairline: rgba(19, 19, 17, 0.16);
   --solid-shadow: rgba(19, 19, 17, 0.16);
   --inverse-bg: #0a0a0a;
   --inverse-text: #f4f3ee;
@@ -87,6 +93,13 @@
   /* Accent — acid lime, used sparingly */
   --lime: #C7FF3D;
   --on-lime: #0A0A0A;
+
+  /* Contribution chart (GitHub light): standard light scale. */
+  --chart-empty: #ebedf0;
+  --chart-l1: #aceebb;
+  --chart-l2: #4ac26b;
+  --chart-l3: #2da44e;
+  --chart-l4: #116329;
 
   /* Scrollbar system — light theme values */
   --scrollbar-thumb: rgba(94, 94, 89, 0.45);
@@ -98,6 +111,10 @@
 
 * { box-sizing: border-box; }
 html { scroll-behavior: smooth; }
+/* Instant theme swaps: applied to <html> for two frames around a theme
+   change so every surface flips in the same paint (otherwise transitioned
+   elements like project cards visibly lag the rest of the page). */
+.theme-instant, .theme-instant *, .theme-instant *::before, .theme-instant *::after { transition: none !important; }
 body { margin: 0; min-width: 320px; background: var(--bg); color: var(--text); }
 button, input { font: inherit; }
 button { cursor: pointer; }
@@ -162,10 +179,10 @@ html {
     transition: width 180ms var(--ease), background-color 150ms ease, opacity 150ms ease;
   }
   /* Tone follows the surface behind each tick: paper ticks on dark bands,
-     ink ticks on paper bands (--paper/--ink-text are mode-invariant, so
-     this stays correct in both color modes). Inactive at ~50% opacity,
-     full contrast on hover/active. mix-blend-mode not needed: per-tick
-     switching covers boundaries exactly. */
+     ink ticks on light bands (--paper/--ink-text are fixed, mode-invariant
+     inks, so this stays correct in both color modes). Inactive at ~50%
+     opacity, full contrast on hover/active. mix-blend-mode not needed:
+     per-tick switching covers boundaries exactly. */
   .rail-tick[data-tone="dark"] .tick-bar { background: var(--paper); opacity: 0.5; }
   .rail-tick[data-tone="light"] .tick-bar { background: var(--ink-text); opacity: 0.5; }
   .rail-tick[data-tone="dark"]:hover .tick-bar, .rail-tick[data-tone="dark"].is-active .tick-bar { background: var(--paper); opacity: 1; }
@@ -258,6 +275,36 @@ kbd { font-family: var(--mono); font-size: 0.85em; letter-spacing: 0.03em; }
 }
 .jump-button:hover { background: transparent; color: var(--text); }
 .jump-button kbd { margin-left: 8px; padding-left: 8px; border-left: 1px solid currentColor; opacity: 0.6; }
+.header-actions { display: flex; align-items: center; gap: 12px; }
+/* Segmented theme control: square, hairline, filled selected segment.
+   The global :focus-visible outline is the focus ring. */
+.theme-control { display: inline-flex; border: 1px solid var(--border-strong); border-radius: 0; }
+.theme-button {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 34px; height: 34px; padding: 0;
+  border: 0; border-right: 1px solid var(--border-strong); border-radius: 0;
+  background: transparent; color: var(--text-muted);
+  transition: background-color 150ms ease, color 150ms ease;
+}
+.theme-button:last-child { border-right: 0; }
+.theme-button:hover { color: var(--text); }
+.theme-button.is-selected { background: var(--text); color: var(--bg); }
+.theme-button svg { width: 15px; height: 15px; display: block; }
+@media (prefers-reduced-motion: reduce) { .theme-button { transition: none; } }
+/* Theme switch wipe: the new theme is revealed by a square clip-path wipe
+   starting from the toggle button box (set as --theme-wipe-from from its
+   bounding rect) and expanding to the full viewport. Old snapshot stays
+   static underneath. Hard square edges, no circle, no blur. */
+::view-transition-old(root) { animation: none; }
+::view-transition-new(root) { animation: theme-wipe 450ms ease-out both; }
+@keyframes theme-wipe {
+  from { clip-path: var(--theme-wipe-from); }
+  to { clip-path: inset(0); }
+}
+/* While the wipe runs, per-element color transitions are disabled so they
+   do not fight it. Removed when the transition finishes; rapid clicks skip
+   the previous transition first so this can never get stuck. */
+html[data-theme-switching], html[data-theme-switching] *, html[data-theme-switching] *::before, html[data-theme-switching] *::after { transition: none !important; }
 .mobile-menu-button { display: none; width: 42px; height: 38px; border: 1px solid var(--border-strong); color: var(--text); background: transparent; }
 .menu-lines { display: grid; gap: 5px; justify-content: center; }
 .menu-lines i { display: block; width: 18px; height: 1px; background: currentColor; }
@@ -338,27 +385,27 @@ h1 em, h2 em { font-style: normal; }
 /* ============ Hero portrait — replaces system-map readout ============ */
 .hero-portrait {
   position: relative; width: min(100%, 420px); margin: 0; justify-self: end;
-  border: 1px solid var(--border-strong); background: #0A0A0A; color: #F2F0E8;
+  border: 1px solid var(--border-strong); background: var(--surface); color: var(--text);
   padding: 16px;
 }
 .hero-portrait-top {
   display: flex; justify-content: space-between; gap: 8px 12px; flex-wrap: wrap;
-  color: rgba(242, 240, 232, 0.62);
+  color: var(--text-muted);
   font-family: var(--mono); font-size: var(--text-xs);
   text-transform: uppercase; letter-spacing: 0.12em;
 }
 .hero-portrait-frame {
   position: relative; aspect-ratio: 1087 / 1447; margin: 12px 0 0; overflow: hidden;
-  border-top: 1px solid rgba(242, 240, 232, 0.14);
-  border-bottom: 1px solid rgba(242, 240, 232, 0.14);
-  background: #0A0A0A;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
   max-height: 58vh;
 }
 .hero-portrait-img {
   position: absolute; inset: 0; width: 100%; height: 100%;
   object-fit: cover; object-position: top center; display: block;
   filter: grayscale(1) contrast(1.05);
-  background: #0A0A0A;
+  background: var(--surface);
 }
 .hero-portrait-img img { width: 100%; height: 100%; object-fit: cover; object-position: top center; display: block; }
 .hero-portrait-frame::after {
@@ -376,85 +423,105 @@ h1 em, h2 em { font-style: normal; }
 .hero-portrait--inline { display: none; }
 
 /* ============ Marquee strip ============ */
-/* ============ Light editorial sections ============ */
-.paper-section { color: var(--ink-text); background: var(--paper); }
-.about-section { padding: var(--section-pad) 0; border-bottom: 1px solid var(--ink-line); }
+/* ============ About ============ */
+.about-section { padding: var(--section-pad) 0; background: var(--surface); border-bottom: 1px solid var(--hairline); }
 .section-heading-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 28px; margin-bottom: clamp(36px, 5vw, 60px); }
 .section-heading-row h2 { margin-bottom: 0; font-size: var(--text-h2); line-height: 0.9; }
 .heading-side { display: flex; flex-direction: column; align-items: flex-end; gap: 10px; text-align: right; flex-shrink: 0; max-width: 280px; }
 .heading-side .section-label { margin-bottom: 0; }
-.section-subheading { max-width: 260px; margin: 0; color: var(--ink-muted); font-family: var(--mono); font-size: var(--text-sm); line-height: 1.6; text-transform: uppercase; letter-spacing: 0.08em; text-align: right; }
-.paper-section .section-label { opacity: 1; color: var(--ink-muted); }
+.section-subheading { max-width: 260px; margin: 0; color: var(--text-muted); font-family: var(--mono); font-size: var(--text-sm); line-height: 1.6; text-transform: uppercase; letter-spacing: 0.08em; text-align: right; }
 
-.about-layout { display: grid; grid-template-columns: 1.25fr 0.9fr 0.85fr; border-top: 1px solid var(--ink-line-strong); border-bottom: 1px solid var(--ink-line); }
+.about-layout { display: grid; grid-template-columns: 1.25fr 0.9fr 0.85fr; border-top: 1px solid var(--border-strong); border-bottom: 1px solid var(--hairline); }
 .about-statement, .about-approach, .status-panel { padding: 30px 30px 30px 0; }
-.about-approach, .status-panel { padding-left: 30px; border-left: 1px solid var(--ink-line); }
+.about-approach, .status-panel { padding-left: 30px; border-left: 1px solid var(--hairline); }
 .about-statement p { font-size: clamp(1.05rem, 1.35vw, 1.3rem); line-height: 1.4; letter-spacing: -0.03em; font-weight: 500; margin-bottom: 0; }
-.about-approach p { max-width: 20rem; color: var(--ink-muted); font-size: var(--text-base); line-height: 1.65; margin-bottom: 0; }
+.about-approach p { max-width: 20rem; color: var(--text-muted); font-size: var(--text-base); line-height: 1.65; margin-bottom: 0; }
 .status-panel dl { margin: 0; }
-.status-panel dl > div { padding: 0 0 16px; margin-bottom: 16px; border-bottom: 1px solid var(--ink-line); }
+.status-panel dl > div { padding: 0 0 16px; margin-bottom: 16px; border-bottom: 1px solid var(--hairline); }
 .status-panel dl > div:last-child { padding-bottom: 0; margin-bottom: 0; border-bottom: 0; }
-.status-panel dt { margin-bottom: 6px; color: var(--ink-muted); font-family: var(--mono); font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.12em; }
-.status-panel dd { margin: 0; color: var(--ink-text); font-size: var(--text-base); line-height: 1.5; }
+.status-panel dt { margin-bottom: 6px; color: var(--text-muted); font-family: var(--mono); font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.12em; }
+.status-panel dd { margin: 0; color: var(--text); font-size: var(--text-base); line-height: 1.5; }
 
 /* ============ Skills — index layout ============ */
-.stack-section { padding: var(--section-pad) 0; background: var(--paper); border-bottom: 1px solid var(--ink-line); }
+.stack-section { padding: var(--section-pad) 0; background: var(--bg); border-bottom: 1px solid var(--hairline); }
 .stack-section .section-heading-row { margin-bottom: clamp(32px, 4vw, 48px); }
-.skills-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; border-top: 1px solid var(--ink-line-strong); }
-.skill-group { padding: 24px 24px 28px 0; border-bottom: 1px solid var(--ink-line); }
-.skill-group + .skill-group { padding-left: 24px; border-left: 1px solid var(--ink-line); }
-.skill-group h3 { margin: 0 0 6px; color: var(--ink-text); font-family: var(--mono); font-size: var(--text-sm); font-weight: 400; text-transform: uppercase; letter-spacing: 0.1em; }
+.skills-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; border-top: 1px solid var(--border-strong); }
+.skill-group { padding: 24px 24px 28px 0; border-bottom: 1px solid var(--hairline); }
+.skill-group + .skill-group { padding-left: 24px; border-left: 1px solid var(--hairline); }
+.skill-group h3 { margin: 0 0 6px; color: var(--text); font-family: var(--mono); font-size: var(--text-sm); font-weight: 400; text-transform: uppercase; letter-spacing: 0.1em; }
 .pill-list { display: grid; gap: 0; }
 .skill-pill {
   display: flex; align-items: center; gap: 10px;
-  padding: 9px 0; border: 0; border-bottom: 1px dotted var(--ink-line);
-  color: var(--ink-text); background: transparent;
+  padding: 9px 0; border: 0; border-bottom: 1px dotted var(--hairline);
+  color: var(--text); background: transparent;
   font-family: var(--mono); font-size: var(--text-sm); letter-spacing: 0.02em; line-height: 1.4;
 }
 .skill-pill:last-child { border-bottom: 0; }
-.skill-pill:hover { border-color: var(--ink-line-strong); color: var(--ink-text); background: var(--paper-2); }
-.skill-icon { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; flex: 0 0 auto; color: var(--ink-muted); transition: color 150ms ease; }
+.skill-pill:hover { border-color: var(--border-strong); color: var(--text); background: var(--surface-2); }
+.skill-icon { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; flex: 0 0 auto; color: var(--text-muted); transition: color 150ms ease; }
 .skill-icon svg { width: 100%; height: 100%; }
 /* Brand hover: row is the target, only the icon takes the brand color, the
    label stays ink. Hover is pointer-only so touch is unaffected;
    focus-visible stays outside the media query for keyboard users. */
 @media (hover: hover) {
-  .skill-pill:hover .skill-icon { color: var(--brand, var(--ink-muted)); }
-  .stack-section[data-theme="dark"] .skill-pill:hover .skill-icon { color: var(--brand-dark, var(--brand, var(--ink-muted))); }
+  .skill-pill:hover .skill-icon { color: var(--brand, var(--text-muted)); }
+  :root[data-theme="dark"] .stack-section .skill-pill:hover .skill-icon { color: var(--brand-dark, var(--brand, var(--text-muted))); }
 }
-.skill-pill:focus-visible .skill-icon { color: var(--brand, var(--ink-muted)); }
-.stack-section[data-theme="dark"] .skill-pill:focus-visible .skill-icon { color: var(--brand-dark, var(--brand, var(--ink-muted))); }
+.skill-pill:focus-visible .skill-icon { color: var(--brand, var(--text-muted)); }
+:root[data-theme="dark"] .stack-section .skill-pill:focus-visible .skill-icon { color: var(--brand-dark, var(--brand, var(--text-muted))); }
+/* Items with no brand color keep a prominent ink icon at rest, on hover
+   and on keyboard focus, in both themes. Later in source so it wins ties. */
+:root[data-theme] .stack-section .skill-pill.no-brand .skill-icon { color: var(--text); }
 @media (prefers-reduced-motion: reduce) {
   .skill-icon { transition: none; }
 }
 .figma-icon { width: 14px; height: 14px; flex: 0 0 auto; }
 
 /* ============ GitHub ============ */
-.github-section { padding: var(--section-pad) 0; background: var(--paper); color: var(--ink-text); border-bottom: 1px solid var(--ink-line); }
-.github-section .section-label { color: var(--ink-muted); }
-.github-section .section-subheading { color: var(--ink-muted); }
-.github-section h2 { color: var(--ink-text); }
+.github-section { padding: var(--section-pad) 0; background: var(--surface); color: var(--text); border-bottom: 1px solid var(--hairline); }
+.github-section .section-label { color: var(--text-muted); }
+.github-section .section-subheading { color: var(--text-muted); }
+.github-section h2 { color: var(--text); }
 .github-grid-wrap { margin-top: 8px; }
-.github-chart-frame { border: 1px solid var(--ink-line-strong); background: #fff; padding: 0; }
+.github-chart-frame { border: 1px solid var(--border-strong); background: var(--surface); padding: 0; }
 .github-chart-header {
   display: flex; align-items: center; gap: 12px;
-  padding: 12px 16px; border-bottom: 1px solid var(--ink-line);
+  padding: 12px 16px; border-bottom: 1px solid var(--hairline);
   font-family: var(--mono); font-size: var(--text-xs);
-  color: var(--ink-muted); letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--text-muted); letter-spacing: 0.08em; text-transform: uppercase;
 }
-.github-chart-header a { margin-left: auto; color: var(--ink-text); text-decoration: underline; text-underline-offset: 3px; font-size: var(--text-xs); }
+.github-chart-header a { margin-left: auto; color: var(--text); text-decoration: underline; text-underline-offset: 3px; font-size: var(--text-xs); }
 .github-chart-link { display: block; overflow-x: auto; padding: 18px; min-height: 148px; scrollbar-width: thin; }
-.github-chart-img { display: block; width: 100%; min-width: 720px; height: auto; filter: none; }
+.github-chart-img, .github-chart-svg { display: block; width: 100%; min-width: 720px; height: auto; }
+.github-chart-svg { shape-rendering: crispedges; }
+.gh-cell[data-level="0"] { fill: var(--chart-empty); }
+.gh-cell[data-level="1"] { fill: var(--chart-l1); }
+.gh-cell[data-level="2"] { fill: var(--chart-l2); }
+.gh-cell[data-level="3"] { fill: var(--chart-l3); }
+.gh-cell[data-level="4"] { fill: var(--chart-l4); }
+.gh-axis { fill: var(--text-muted); font-family: var(--mono); font-size: 9px; letter-spacing: 0.04em; }
+.gh-swatch { width: 10px; height: 10px; }
+.gh-swatch[data-level="0"] { background: var(--chart-empty); }
+.gh-swatch[data-level="1"] { background: var(--chart-l1); }
+.gh-swatch[data-level="2"] { background: var(--chart-l2); }
+.gh-swatch[data-level="3"] { background: var(--chart-l3); }
+.gh-swatch[data-level="4"] { background: var(--chart-l4); }
+.github-legend {
+  display: flex; align-items: center; justify-content: flex-end; gap: 6px;
+  padding: 10px 16px 12px; border-top: 1px solid var(--hairline);
+  font-family: var(--mono); font-size: var(--text-xs);
+  text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted);
+}
 .github-chart-fallback {
   display: flex; align-items: center; justify-content: space-between; gap: 16px;
   min-height: 112px; padding: 20px;
-  border: 1px dashed var(--ink-line-strong);
-  font-family: var(--mono); font-size: var(--text-sm); color: var(--ink-muted);
+  border: 1px dashed var(--border-strong);
+  font-family: var(--mono); font-size: var(--text-sm); color: var(--text-muted);
 }
-.github-chart-fallback a { color: var(--ink-text); }
-.github-meta { display: flex; align-items: center; gap: 10px; padding-top: 12px; font-family: var(--mono); font-size: var(--text-xs); color: var(--ink-muted); letter-spacing: 0.06em; text-transform: uppercase; }
-.github-meta-dot { width: 5px; height: 5px; background: var(--ink-text); flex: 0 0 auto; }
-@media (max-width: 700px) { .github-chart-img { min-width: 640px; } }
+.github-chart-fallback a { color: var(--text); }
+.github-meta { display: flex; align-items: center; gap: 10px; padding-top: 12px; font-family: var(--mono); font-size: var(--text-xs); color: var(--text-muted); letter-spacing: 0.06em; text-transform: uppercase; }
+.github-meta-dot { width: 5px; height: 5px; background: var(--text); flex: 0 0 auto; }
+@media (max-width: 700px) { .github-chart-img, .github-chart-svg { min-width: 640px; } }
 
 /* ============ Dark sections: projects + certifications ============ */
 .ink-section { color: var(--text); background: var(--bg); }
@@ -542,71 +609,71 @@ h1 em, h2 em { font-style: normal; }
 .status-in-progress { border-style: dashed; }
 
 /* ============ Timeline ============ */
-.timeline-section { padding: var(--section-pad) 0; background: var(--paper); color: var(--ink-text); border-bottom: 1px solid var(--ink-line); }
+.timeline-section { padding: var(--section-pad) 0; background: var(--surface); color: var(--text); border-bottom: 1px solid var(--hairline); }
 .timeline-section .section-heading-row { margin-bottom: 20px; }
 .timeline-hint { text-align: right; }
 .timeline-badges { display: flex; gap: 8px; margin-bottom: 44px; }
-.timeline-badges span { padding: 6px 10px; color: var(--ink-muted); border: 1px solid var(--ink-line-strong); font-family: var(--mono); font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.1em; }
+.timeline-badges span { padding: 6px 10px; color: var(--text-muted); border: 1px solid var(--border-strong); font-family: var(--mono); font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.1em; }
 .timeline-viewport { overflow-x: clip; overflow-y: visible; margin: 0 calc((100vw - var(--gutter)) / -2); padding: 16px max(24px, calc((100vw - var(--gutter)) / 2)) 8px; display: flex; align-items: center; }
 .timeline-track { display: flex; position: relative; width: max-content; flex: 0 0 auto; margin: 0; padding: 0 clamp(48px, 6vw, 96px) 0 0; overflow: visible; overscroll-behavior-x: contain; scrollbar-width: thin; align-items: flex-start; }
-.timeline-track::before { position: absolute; content: ""; top: 0; left: 0; right: clamp(48px, 6vw, 96px); height: 1px; background: var(--ink-line); }
+.timeline-track::before { position: absolute; content: ""; top: 0; left: 0; right: clamp(48px, 6vw, 96px); height: 1px; background: var(--hairline); }
 /* Progress fill — same geometry as the base track, lives inside the
    horizontally-moving track so it scrolls with the cards. Driven via
    transform only from the existing 'timeline-horizontal' onUpdate.
    right: matches the track's padding-right exactly, so both lines terminate
    at the end cap instead of dangling into the trailing padding. */
-.timeline-progress { position: absolute; top: 0; left: 0; right: clamp(48px, 6vw, 96px); height: 1px; background: var(--ink-text); transform: scaleX(0); transform-origin: left center; will-change: transform; }
+.timeline-progress { position: absolute; top: 0; left: 0; right: clamp(48px, 6vw, 96px); height: 1px; background: var(--text); transform: scaleX(0); transform-origin: left center; will-change: transform; }
 /* STEP 5: start cap — 48px lead ending in a solid square at the track's left
    edge (= container left edge, same x as the heading). First marker sits 48px
    further in, so the line visibly begins before the cards. */
 .timeline-start { position: relative; flex: 0 0 48px; align-self: stretch; }
-.timeline-start::after { position: absolute; content: ""; top: 0.5px; left: 0; width: 10px; height: 10px; background: var(--ink-text); transform: translate(-50%, -50%); }
+.timeline-start::after { position: absolute; content: ""; top: 0.5px; left: 0; width: 10px; height: 10px; background: var(--text); transform: translate(-50%, -50%); }
 /* STEP 5: end cap — line extends past the last card, then a terminal square
    plus mono label. Track padding-right keeps text off the viewport edge and
    getTimelineDistance() (scrollWidth-based) already includes this width. */
 .timeline-end { position: relative; flex: 0 0 180px; align-self: stretch; }
-.timeline-end-square { position: absolute; top: 0.5px; left: 0; width: 10px; height: 10px; background: var(--ink-text); transform: translate(-50%, -50%); }
-.timeline-end-label { position: absolute; top: 20px; left: 0; transform: translateX(-50%); white-space: nowrap; font-family: var(--mono); font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.12em; color: var(--ink-muted); }
+.timeline-end-square { position: absolute; top: 0.5px; left: 0; width: 10px; height: 10px; background: var(--text); transform: translate(-50%, -50%); }
+.timeline-end-label { position: absolute; top: 20px; left: 0; transform: translateX(-50%); white-space: nowrap; font-family: var(--mono); font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.12em; color: var(--text-muted); }
 .timeline-entry { position: relative; z-index: 1; flex: 0 0 clamp(280px, 30vw, 360px); min-height: 340px; padding: 26px 28px 0 0; margin-right: clamp(28px, 3.5vw, 48px); scroll-snap-align: start; opacity: 0.6; transition: opacity 200ms var(--ease); }
-/* STEP 7: current card at full opacity; 0.6 floor keeps ink-on-paper
-   readable in both themes (paper section is identical dark/light). */
+/* STEP 7: current card at full opacity; the 0.6 floor keeps body text
+   readable on both theme surfaces. */
 .timeline-entry[data-state="current"] { opacity: 1; }
-/* Current year: no badge — bold ink with a short 1px underline.
+/* Current year: no badge — bold text with a short 1px underline.
    All other years stay muted via the base .timeline-year rule. */
-.timeline-entry[data-state="current"] .timeline-year { color: var(--ink-text); font-weight: 700; }
-.timeline-entry[data-state="current"] .timeline-year::after { content: ""; display: block; width: 28px; height: 1px; margin-top: 6px; background: var(--ink-text); }
+.timeline-entry[data-state="current"] .timeline-year { color: var(--text); font-weight: 700; }
+.timeline-entry[data-state="current"] .timeline-year::after { content: ""; display: block; width: 28px; height: 1px; margin-top: 6px; background: var(--text); }
 /* STEP 7: title underline draw on hover/focus — transform only. */
 .timeline-entry h3 { position: relative; width: fit-content; }
 .timeline-entry h3::after { position: absolute; content: ""; left: 0; bottom: -3px; width: 100%; height: 1px; background: currentColor; transform: scaleX(0); transform-origin: left center; transition: transform 200ms var(--ease); }
 .timeline-entry:hover h3::after, .timeline-entry:focus-within h3::after { transform: scaleX(1); }
-/* Markers — flat ink squares, no glow, no animation.
-   Upcoming: hollow, 1px ink-line-strong border, paper fill.
-   Reached: solid ink-text fill. Current: solid, slightly larger (12px),
+/* Markers — flat squares, no glow, no animation.
+   Upcoming: hollow, 1px strong border, surface fill.
+   Reached: solid text fill. Current: solid, slightly larger (12px),
    plus a 1px outer outline offset 3px. */
-.timeline-entry::after { position: absolute; content: ""; top: 0.5px; left: 0; width: 10px; height: 10px; background: var(--paper); border: 1px solid var(--ink-line-strong); transform: translate(-50%, -50%); }
+.timeline-entry::after { position: absolute; content: ""; top: 0.5px; left: 0; width: 10px; height: 10px; background: var(--surface); border: 1px solid var(--border-strong); transform: translate(-50%, -50%); }
 /* STEP 4: 12px stem from marker down toward the year label — explicit link. */
-.timeline-entry::before { position: absolute; content: ""; top: 6px; left: 0; width: 1px; height: 12px; background: var(--ink-line-strong); transform: translateX(-50%); }
+.timeline-entry::before { position: absolute; content: ""; top: 6px; left: 0; width: 1px; height: 12px; background: var(--border-strong); transform: translateX(-50%); }
 /* Marker states driven from scroll progress via data-state (not hover). */
-.timeline-entry[data-state="reached"]::after { background: var(--ink-text); border-color: var(--ink-text); }
-.timeline-entry[data-state="current"]::after { width: 12px; height: 12px; background: var(--ink-text); border-color: var(--ink-text); outline: 1px solid var(--ink-text); outline-offset: 3px; }
-.timeline-year { margin-bottom: 16px; color: var(--ink-muted); font-family: var(--mono); font-size: var(--text-sm); font-weight: 400; letter-spacing: 0.06em; }
-.timeline-badge { display: inline-block; margin-bottom: 16px; color: var(--ink-muted); border: 1px solid var(--ink-line); padding: 4px 8px; font-family: var(--mono); font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.1em; }
+.timeline-entry[data-state="reached"]::after { background: var(--text); border-color: var(--text); }
+.timeline-entry[data-state="current"]::after { width: 12px; height: 12px; background: var(--text); border-color: var(--text); outline: 1px solid var(--text); outline-offset: 3px; }
+.timeline-year { margin-bottom: 16px; color: var(--text-muted); font-family: var(--mono); font-size: var(--text-sm); font-weight: 400; letter-spacing: 0.06em; }
+.timeline-badge { display: inline-block; margin-bottom: 16px; color: var(--text-muted); border: 1px solid var(--hairline); padding: 4px 8px; font-family: var(--mono); font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.1em; }
 .timeline-entry h3 { max-width: 18rem; margin-bottom: 10px; font-size: var(--text-h3); line-height: 1; font-weight: 500; letter-spacing: -0.035em; }
-.timeline-role { color: var(--ink-muted); font-family: var(--mono); font-size: var(--text-xs); line-height: 1.6; text-transform: uppercase; letter-spacing: 0.06em; }
+.timeline-role { color: var(--text-muted); font-family: var(--mono); font-size: var(--text-xs); line-height: 1.6; text-transform: uppercase; letter-spacing: 0.06em; }
 .timeline-role span { opacity: 0.5; padding: 0 4px; }
-.timeline-entry-body > p:last-child { max-width: 20rem; font-size: var(--text-base); line-height: 1.6; color: var(--ink-text); }
+.timeline-entry-body > p:last-child { max-width: 20rem; font-size: var(--text-base); line-height: 1.6; color: var(--text); }
 .timeline-cta {
   display: inline-flex; align-items: center; gap: 10px;
-  margin-top: 0; padding: 0 0 8px; border: 0; border-bottom: 1px solid var(--ink-line-strong);
-  background: transparent; color: var(--ink-text);
+  margin-top: 0; padding: 0 0 8px; border: 0; border-bottom: 1px solid var(--border-strong);
+  background: transparent; color: var(--text);
   font-family: var(--mono); font-size: var(--text-sm); text-transform: uppercase; letter-spacing: 0.08em;
 }
-.timeline-cta:hover { border-color: var(--ink-text); }
+.timeline-cta:hover { border-color: var(--text); }
 /* STEP 6: footer row anchors the CTA at the bottom with safe-area padding;
    the viewport (flex:1, centered) absorbs the free space instead of pooling
    it between cards and CTA. Counter skipped ruler per decision. */
 .timeline-footer { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex: 0 0 auto; margin-top: 24px; padding-bottom: env(safe-area-inset-bottom, 0px); }
-.timeline-counter { font-family: var(--mono); font-size: var(--text-xs); letter-spacing: 0.12em; color: var(--ink-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.timeline-counter { font-family: var(--mono); font-size: var(--text-xs); letter-spacing: 0.12em; color: var(--text-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
 /* While the timeline pin owns the viewport, hide the fixed section rail so
    its ticks never read as stray marks over the paper line. Toggled by the
    timeline ScrollTrigger (body class); the rail is untouched everywhere else. */
@@ -644,7 +711,7 @@ body.timeline-pin-active .section-rail { display: none; }
 }
 
 /* ============ Contact ============ */
-.contact-section { color: var(--ink-text); background: var(--paper); padding: var(--section-pad) 0; min-height: 70svh; }
+.contact-section { color: var(--text); background: var(--surface); padding: var(--section-pad) 0; min-height: 70svh; }
 .contact-layout { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(48px, 8vw, 140px); }
 .contact-section h2 { margin-bottom: 0; font-size: var(--text-h2); line-height: 0.9; }
 .contact-copy { padding-top: 40px; }
@@ -652,26 +719,26 @@ body.timeline-pin-active .section-rail { display: none; }
 .email-button {
   display: flex; align-items: center; gap: 12px; width: 100%;
   padding: 18px 0; margin: 32px 0 22px;
-  border: 0; border-top: 1px solid var(--ink-line-strong); border-bottom: 1px solid var(--ink-line-strong);
-  color: var(--ink-text); background: transparent;
+  border: 0; border-top: 1px solid var(--border-strong); border-bottom: 1px solid var(--border-strong);
+  color: var(--text); background: transparent;
   font-family: var(--mono); font-size: var(--text-base); text-align: left;
   transition: padding 0.2s var(--ease);
 }
 .email-button:hover { padding-left: 8px; }
 .email-button .arrow-icon { margin-left: auto; }
-.email-prefix { color: var(--ink-faint); font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.1em; }
-.contact-meta { display: flex; align-items: center; justify-content: space-between; gap: 20px; color: var(--ink-muted); font-family: var(--mono); font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.08em; }
+.email-prefix { color: var(--text-faint); font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.1em; }
+.contact-meta { display: flex; align-items: center; justify-content: space-between; gap: 20px; color: var(--text-muted); font-family: var(--mono); font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.08em; }
 .social-row { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; }
-.social-link { display: inline-flex; align-items: center; gap: 7px; color: var(--ink-muted); font-family: var(--mono); font-size: var(--text-xs); text-decoration: none; text-transform: uppercase; letter-spacing: 0.08em; border-bottom: 1px solid transparent; padding-bottom: 2px; transition: color 0.2s ease, border-color 0.2s ease; }
-.social-link:hover { color: var(--ink-text); border-color: var(--ink-text); }
+.social-link { display: inline-flex; align-items: center; gap: 7px; color: var(--text-muted); font-family: var(--mono); font-size: var(--text-xs); text-decoration: none; text-transform: uppercase; letter-spacing: 0.08em; border-bottom: 1px solid transparent; padding-bottom: 2px; transition: color 0.2s ease, border-color 0.2s ease; }
+.social-link:hover { color: var(--text); border-color: var(--text); }
 .social-icon { width: 14px; height: 14px; fill: currentColor; }
 .resume-button {
   display: inline-flex; align-items: center; gap: 12px;
-  padding: 12px 0; margin-top: 34px; border: 0; border-bottom: 1px solid var(--ink-line-strong);
-  color: var(--ink-text); background: transparent;
+  padding: 12px 0; margin-top: 34px; border: 0; border-bottom: 1px solid var(--border-strong);
+  color: var(--text); background: transparent;
   font-family: var(--mono); font-size: var(--text-sm); text-transform: uppercase; letter-spacing: 0.08em;
 }
-.resume-button:hover { border-color: var(--ink-text); }
+.resume-button:hover { border-color: var(--text); }
 
 /* ============ Footer ============ */
 .site-footer { color: var(--text-muted); background: var(--bg); border-top: 1px solid var(--border); font-family: var(--mono); font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.08em; }
@@ -919,12 +986,12 @@ body.timeline-pin-active .section-rail { display: none; }
   .hero-portrait--inline { display: block; width: 100%; max-width: 520px; margin: 2px 0 30px; justify-self: start; }
   .hero-portrait-frame { max-height: none; }
   .about-layout { grid-template-columns: 1fr 1fr; }
-  .about-statement { grid-column: span 2; border-bottom: 1px solid var(--ink-line); padding-right: 0; }
+  .about-statement { grid-column: span 2; border-bottom: 1px solid var(--hairline); padding-right: 0; }
   .about-approach { border-left: 0; padding-left: 0; }
   .status-panel { padding-left: 24px; }
   .skills-grid { grid-template-columns: 1fr 1fr; }
   .skill-group:nth-child(odd) { padding-left: 0; border-left: 0; }
-  .skill-group:nth-child(even) { padding-left: 20px; border-left: 1px solid var(--ink-line); }
+  .skill-group:nth-child(even) { padding-left: 20px; border-left: 1px solid var(--hairline); }
   .project-card { grid-template-columns: 48px minmax(0, 1fr); }
   .project-controls { grid-column: 2; flex-direction: row; align-items: center; justify-content: flex-start; }
   .project-details { grid-column: 2; }
@@ -946,6 +1013,22 @@ body.timeline-pin-active .section-rail { display: none; }
   }
   .mobile-nav button:last-child { border-bottom: 0; }
   .mobile-nav button.active { color: var(--text); }
+  .mobile-theme-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 0;
+    color: var(--text-muted);
+    font-family: var(--mono); font-size: var(--text-sm);
+    text-transform: uppercase; letter-spacing: 0.1em;
+  }
+  /* Neutralize the full-width mobile-nav button rules for the control. */
+  .mobile-nav .theme-button {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 38px; height: 38px; padding: 0;
+    border: 0; border-right: 1px solid var(--border-strong);
+    background: transparent; text-transform: none; letter-spacing: 0;
+  }
+  .mobile-nav .theme-button:last-child { border-right: 0; }
+  .mobile-nav .theme-button.is-selected { background: var(--text); color: var(--bg); }
   .hero-section { min-height: auto; }
   .hero-content { padding: 64px 0 96px; }
   .hero-intro { font-size: 1.15rem; }
@@ -957,7 +1040,7 @@ body.timeline-pin-active .section-rail { display: none; }
   .section-heading-row > div:first-child { order: 1; }
   .section-subheading { text-align: left; max-width: none; }
   .about-layout { display: block; border-bottom: 0; }
-  .about-statement, .about-approach, .status-panel { padding: 24px 0; border: 0; border-bottom: 1px solid var(--ink-line); }
+  .about-statement, .about-approach, .status-panel { padding: 24px 0; border: 0; border-bottom: 1px solid var(--hairline); }
   .skills-grid { grid-template-columns: 1fr; }
   .skill-group, .skill-group:nth-child(even) { padding: 20px 0; border-left: 0; }
   .filter-bar { border-left: 1px solid var(--border); }
