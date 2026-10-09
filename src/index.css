@@ -71,6 +71,9 @@
   /* Sticky header height — measured in JS and written back here on
      load/resize; 69px (.header-inner 68px + 1px border) is the fallback. */
   --header-h: 69px;
+  /* Header controls share one fixed height (theme segments are 2px shorter
+     to leave room for the control border). */
+  --header-control-h: 36px;
 
   color: var(--text);
   background: var(--bg);
@@ -248,13 +251,14 @@ kbd { font-family: var(--mono); font-size: 0.85em; letter-spacing: 0.03em; }
   color: var(--text); background: var(--bg);
   border-bottom: 1px solid var(--border);
 }
-.header-inner { min-height: 68px; display: flex; align-items: center; justify-content: space-between; gap: 24px; }
+.header-inner { min-height: 68px; display: flex; align-items: center; justify-content: space-between; gap: 24px; flex-wrap: nowrap; }
 .wordmark {
   padding: 4px 0; border: 0; background: transparent; color: var(--text);
   font-family: var(--mono); font-weight: 700; letter-spacing: -0.06em; font-size: 1.05rem;
+  flex: 0 0 auto; white-space: nowrap;
 }
 .wordmark-cursor { color: var(--text); }
-.desktop-nav { display: flex; align-items: center; gap: 26px; margin-left: auto; }
+.desktop-nav { display: flex; align-items: center; gap: 26px; margin-left: auto; flex: 1 1 auto; min-width: 0; }
 .desktop-nav button, .jump-button {
   position: relative; border: 0; background: transparent;
   color: var(--text-muted);
@@ -262,6 +266,7 @@ kbd { font-family: var(--mono); font-size: 0.85em; letter-spacing: 0.03em; }
   text-transform: uppercase; letter-spacing: 0.1em;
   padding: 6px 0;
   transition: color 0.2s ease;
+  white-space: nowrap;
 }
 .desktop-nav button::after {
   position: absolute; content: ""; height: 1px; left: 0; right: 100%; bottom: 0;
@@ -270,18 +275,21 @@ kbd { font-family: var(--mono); font-size: 0.85em; letter-spacing: 0.03em; }
 .desktop-nav button:hover, .desktop-nav button.active { color: var(--text); }
 .desktop-nav button.active::after { right: 0; }
 .jump-button {
+  display: inline-flex; align-items: center; gap: 8px;
+  height: var(--header-control-h); line-height: 1;
   padding: 8px 12px; color: var(--inverse-text); background: var(--inverse-bg);
   border: 1px solid var(--inverse-bg);
+  white-space: nowrap; flex: 0 0 auto;
 }
 .jump-button:hover { background: transparent; color: var(--text); }
-.jump-button kbd { margin-left: 8px; padding-left: 8px; border-left: 1px solid currentColor; opacity: 0.6; }
-.header-actions { display: flex; align-items: center; gap: 12px; }
+.jump-button kbd { margin-left: 0; padding-left: 8px; border-left: 1px solid currentColor; opacity: 0.6; white-space: nowrap; }
+.header-actions { display: flex; align-items: center; gap: 12px; flex: 0 0 auto; }
 /* Segmented theme control: square, hairline, filled selected segment.
    The global :focus-visible outline is the focus ring. */
-.theme-control { display: inline-flex; border: 1px solid var(--border-strong); border-radius: 0; }
+.theme-control { display: inline-flex; border: 1px solid var(--border-strong); border-radius: 0; flex: 0 0 auto; }
 .theme-button {
   display: inline-flex; align-items: center; justify-content: center;
-  width: 34px; height: 34px; padding: 0;
+  width: 34px; height: calc(var(--header-control-h) - 2px); padding: 0;
   border: 0; border-right: 1px solid var(--border-strong); border-radius: 0;
   background: transparent; color: var(--text-muted);
   transition: background-color 150ms ease, color 150ms ease;
@@ -291,6 +299,15 @@ kbd { font-family: var(--mono); font-size: 0.85em; letter-spacing: 0.03em; }
 .theme-button.is-selected { background: var(--text); color: var(--bg); }
 .theme-button svg { width: 15px; height: 15px; display: block; }
 @media (prefers-reduced-motion: reduce) { .theme-button { transition: none; } }
+/* Header collapse order, measured: the Jump button wraps below ~1100px,
+   so the shortcut hint goes first; nav spacing tightens below ~900px;
+   the hamburger takes over at 800px (see responsive block). */
+@media (max-width: 1100px) { .jump-button kbd { display: none; } }
+@media (hover: none) { .jump-button kbd { display: none; } }
+@media (max-width: 900px) {
+  .desktop-nav { gap: 16px; }
+  .desktop-nav button, .jump-button { letter-spacing: 0.06em; }
+}
 /* Theme switch wipe: the new theme is revealed by a square clip-path wipe
    starting from the toggle button box (set as --theme-wipe-from from its
    bounding rect) and expanding to the full viewport. Old snapshot stays
@@ -998,10 +1015,12 @@ body.timeline-pin-active .section-rail { display: none; }
   .contact-layout { gap: 40px; }
 }
 
-@media (max-width: 700px) {
-  :root { --section-pad: 72px; }
-  .container { width: min(100% - 32px, 540px); }
-  .desktop-nav, .jump-button { display: none; }
+/* Header and mobile menu switch at 800px (measured: the desktop nav no
+   longer fits a single row below ~800px). Cards, deck, and timeline keep
+   their 700px breakpoint. The header theme control hides here, so the
+   mobile menu Theme row is the only mobile theme control. */
+@media (max-width: 800px) {
+  .desktop-nav, .jump-button, .header-actions > .theme-control { display: none; }
   .mobile-menu-button { display: block; }
   .mobile-nav { display: grid; padding: 6px 16px 14px; border-top: 1px solid var(--border); background: var(--bg); }
   .mobile-nav button {
@@ -1029,6 +1048,11 @@ body.timeline-pin-active .section-rail { display: none; }
   }
   .mobile-nav .theme-button:last-child { border-right: 0; }
   .mobile-nav .theme-button.is-selected { background: var(--text); color: var(--bg); }
+}
+
+@media (max-width: 700px) {
+  :root { --section-pad: 72px; }
+  .container { width: min(100% - 32px, 540px); }
   .hero-section { min-height: auto; }
   .hero-content { padding: 64px 0 96px; }
   .hero-intro { font-size: 1.15rem; }
