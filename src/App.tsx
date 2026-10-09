@@ -3,7 +3,7 @@ import type { KeyboardEvent as ReactKeyboardEvent, ReactNode, RefObject } from '
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { ScrollToPlugin } from 'gsap/ScrollToPlugin';
-import { certifications, email, projects, skillGroups, technologies, timeline, type Project, type ProjectStatus } from './data';
+import { certifications, email, projects, skillGroups, timeline, type Project, type ProjectStatus } from './data';
 import { ErrorBoundary, NotFoundScreen, parseRoute } from './errors';
 import type { RouteState } from './errors';
 import {
@@ -68,6 +68,45 @@ const navItems = [
   { id: 'contact', label: 'Contact' },
 ];
 
+// Rail tone: each tick samples the surface theme of the section behind its
+// own vertical center, so ticks stay contrasted across dark and paper
+// bands (including ticks straddling a boundary). Attribute writes only,
+// no re-render.
+function updateRailTones() {
+  const ticks = document.querySelectorAll<HTMLElement>('.rail-tick');
+  if (!ticks.length) return;
+  const bands = sectionOrder
+    .map((id) => document.getElementById(id))
+    .filter((el): el is HTMLElement => Boolean(el))
+    .map((el) => {
+      const rect = el.getBoundingClientRect();
+      return { top: rect.top, bottom: rect.bottom, tone: el.dataset.theme ?? 'dark' };
+    });
+  ticks.forEach((tick) => {
+    const y = tick.getBoundingClientRect().top + tick.offsetHeight / 2;
+    const band = bands.find((b) => y >= b.top && y <= b.bottom);
+    const tone = band?.tone ?? 'dark';
+    if (tick.dataset.tone !== tone) tick.dataset.tone = tone;
+  });
+}
+
+// Single shared scroll-spy: the nav id whose section range contains a line
+// at ~35% viewport height. Short trailing sections can never pull their top
+// up to a header/top-center line (the page bottom clamps first), so when
+// scrolled within ~2px of the bottom the last section wins outright.
+function readActiveNav(): string {
+  const vh = window.innerHeight;
+  if (window.scrollY + vh >= document.documentElement.scrollHeight - 2) return 'contact';
+  const line = vh * 0.35;
+  for (const id of sectionOrder) {
+    const section = document.getElementById(id);
+    if (!section) continue;
+    const rect = section.getBoundingClientRect();
+    if (rect.top <= line && rect.bottom >= line) return navSectionFor[id] ?? id;
+  }
+  return 'hero';
+}
+
 // STEP 4: rail follows DOM order (skills sits between about and projects).
 // Active state reuses activeSection — no second source of truth.
 const railItems = [
@@ -79,13 +118,21 @@ const railItems = [
   { id: 'contact', label: 'Contact' },
 ];
 
-const filters: Array<'All' | ProjectStatus> = ['All', 'Shipped', 'In Progress', 'Active'];
+const filters: Array<'All' | ProjectStatus> = ['All', 'Shipped', 'In Progress'];
 
 // The desktop-only project deck (pinned, stacked cards) exists solely under
 // this query. Every deck visual driver must check it so mobile — a static
 // vertical list with no trigger — never gets card visuals forced on it.
 const DESKTOP_DECK_QUERY = '(min-width: 701px) and (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference)';
 const isDesktopDeck = () => typeof window !== 'undefined' && window.matchMedia(DESKTOP_DECK_QUERY).matches;
+
+// Pin/start contract for the projects deck (single source of truth — the
+// filter reset below lands on the rebuilt trigger's start, which derives
+// from this): the frame parks flush with the viewport top, and the frame's
+// own 88px top padding keeps the heading clear of the sticky header. This
+// only holds because the desktop section padding-top is 0 both before the
+// pin starts and while pinned (media-driven, never state-driven).
+const PROJECTS_PIN_START = 'top top';
 
 function ArrowUpRight() {
   return <span aria-hidden="true" className="arrow-icon">↗</span>;
@@ -166,7 +213,7 @@ function StatusBadge({ status }: { status: ProjectStatus }) {
   return <span className={`status-badge status-${status.toLowerCase().replace(' ', '-')}`}><span className="status-dot" aria-hidden="true" />{status}</span>;
 }
 
-function App({ ssr = false }: { ssr?: boolean }) {
+function App() {
   const [theme, setTheme] = useState<Theme>(() => (typeof window !== 'undefined' ? (localStorage.getItem('jedv-theme') as Theme | null) : null) ?? 'dark');
   const [activeSection, setActiveSection] = useState('hero');
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -175,13 +222,8 @@ function App({ ssr = false }: { ssr?: boolean }) {
   const [selectedCommand, setSelectedCommand] = useState(0);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [filter, setFilter] = useState<'All' | ProjectStatus>('All');
-  const [expandedProjects, setExpandedProjects] = useState<string[]>([]);
-  const [marqueePaused, setMarqueePaused] = useState(false);
   const [resumeState, setResumeState] = useState<'idle' | 'preparing' | 'saved'>('idle');
-  const [hasOpenedPalette, setHasOpenedPalette] = useState(false);
   const [reducedMotion, setReducedMotion] = useState(false);
-  const [booting, setBooting] = useState(true);
-  const [typedRole, setTypedRole] = useState('');
   const [inspectionProject, setInspectionProject] = useState<Project | null>(null);
   // STEP 1 (UI layer): static-host route. No router in this app — the path is
   // read once (SSR-safe) and re-read on popstate. Unknown paths → 404 screen.
@@ -191,15 +233,35 @@ function App({ ssr = false }: { ssr?: boolean }) {
   const projectsStageRef = useRef<HTMLDivElement>(null);
   const projectListRef = useRef<HTMLDivElement>(null);
   const projectsTriggerRef = useRef<ScrollTrigger | null>(null);
-  const deckLockRef = useRef<{ locked: boolean; index: number }>({ locked: false, index: 0 });
   const deckIndexRef = useRef(0);
   const deckSettleRef = useRef<(() => void) | null>(null);
   const projectsRefreshRaf = useRef(0);
-  const timelineSectionRef = useRef<HTMLElement>(null);
-  const timelineViewportRef = useRef<HTMLDivElement>(null);
+  const timelineSectionRef = useRef<HTMLElement>(null);  const timelineViewportRef = useRef<HTMLDivElement>(null);
   const timelineTrackRef = useRef<HTMLDivElement>(null);
   const toastId = useRef(0);
+  // Mouse presses activate filters on pointerdown (not click), so a press
+  // still counts when the page is moving under the cursor at release
+  // (momentum + snap tail after a fling: down/up land on different
+  // targets and the click is lost). Touch, pen, keyboard and screen
+  // readers keep standard click activation; the flag below consumes the
+  // mouse click that follows its own pointerdown so it never double-fires.
+  const filterPressRef = useRef(false);
   const visibleProjects = projects.filter((project) => filter === 'All' || project.status === filter);
+  // Mirror for handlers that must see the current dialog project without
+  // re-subscribing (global Esc): plain ref read at call time, never stale.
+  const inspectionProjectRef = useRef<Project | null>(null);
+  inspectionProjectRef.current = inspectionProject;
+  // Scroll-spy click lock: set on nav/rail/palette jumps, cleared on
+  // scrollend or a timeout fallback, so the spy cannot override the click
+  // while the smooth scroll is still traveling.
+  const spyLockRef = useRef(false);
+  const spyTimerRef = useRef(0);
+  const lockSpy = (navId: string) => {
+    setActiveSection(navId);
+    spyLockRef.current = true;
+    window.clearTimeout(spyTimerRef.current);
+    spyTimerRef.current = window.setTimeout(() => { spyLockRef.current = false; }, 800);
+  };
 
   const notify = (message: string) => {
     const id = toastId.current + 1;
@@ -208,9 +270,10 @@ function App({ ssr = false }: { ssr?: boolean }) {
     window.setTimeout(() => setToasts((current) => current.filter((toast) => toast.id !== id)), 3200);
   };
 
-  const scrollToSection = (id: string, label: string, shouldNotify = true) => {
+  const scrollToSection = (id: string, _label: string) => {
     const el = document.getElementById(id);
     if (el) {
+      lockSpy(navSectionFor[id] ?? id);
       // Immediate jump — no GSAP scrub / smooth delay.
       // Single shared value: measured sticky header height (69px fallback).
       const headerOffset = Math.ceil(document.querySelector('.site-header')?.getBoundingClientRect().height ?? 69);
@@ -223,7 +286,6 @@ function App({ ssr = false }: { ssr?: boolean }) {
     }
     setMobileNavOpen(false);
     setPaletteOpen(false);
-    if (shouldNotify) notify(`Moved to ${label}`);
   };
 
   const toggleTheme = () => {
@@ -260,13 +322,85 @@ function App({ ssr = false }: { ssr?: boolean }) {
     window.setTimeout(() => setResumeState('idle'), 3200);
   };
 
-  const toggleProject = (id: string) => {
-    setExpandedProjects((current) => current.includes(id) ? current.filter((projectId) => projectId !== id) : [...current, id]);
+  // Filter change behaves like a fresh start, in strict order:
+  // 1. absolute top from the section element itself (never a killed ST).
+  // On the desktop deck the reset target is the pin line itself (frame top
+  // at viewport top, exactly the pinned look, progress 0, first card);
+  // everywhere else the target clears the sticky header. The old code used
+  // the header-cleared target on desktop too, which sat ~69px lower than
+  // the pinned heading and read as a layout jump.
+  // 2. freeze the document height at its current rendered value, so the
+  // pin-spacer collapse cannot shift anything below mid-change (this also
+  // starves scroll anchoring: nothing moves, so no anchor adjustment fires);
+  // 3. instant jump with CSS smooth killed for this call only;
+  // 4. AFTER the jump's scroll event has been processed, swap the list,
+  // revert/rebuild the pin, reset deck state;
+  // 5. after the DOM updates: refresh, scroll to the NEW trigger's start
+  // (st.start, derived from PROJECTS_PIN_START, so reset and pin agree by
+  // construction), release the freeze, refresh again, assert the start
+  // LAST, then restore smooth.
+  // Why the deferral in step 4 (traced root cause): ScrollTrigger caches
+  // the scroller position and refresh() records it, then restores it at
+  // the end. The cache only goes fresh in ScrollTrigger's native scroll
+  // listener, which runs as a later task. Committing synchronously in the
+  // click handler rebuilds before that task, so the rebuild refresh
+  // records the stale pre-jump value and scrolls back to it (traced:
+  // refresh restoring the old Y, then clamping to max scroll). Waiting two
+  // frames guarantees the cache holds the post-jump position first.
+  const handleFilterChange = (option: 'All' | ProjectStatus) => {
+    if (option === filter) return;
+    const section = document.getElementById('projects');
+    if (!section) {
+      setFilter(option);
+      return;
+    }
+    const desktopDeck = isDesktopDeck();
+    const headerOffset = Math.ceil(document.querySelector('.site-header')?.getBoundingClientRect().height ?? 69);
+    const sectionTop = section.getBoundingClientRect().top + window.scrollY;
+    const preTop = desktopDeck ? sectionTop : sectionTop - headerOffset + 1;
+    // border-box is global, so minHeight matches the rendered height exactly.
+    const prevMinHeight = section.style.minHeight;
+    section.style.minHeight = `${section.offsetHeight}px`;
+    // Page-wide anchor kill for the swap window (the projects-section rule
+    // alone cannot suppress anchors living in later sections).
+    const prevAnchor = document.body.style.overflowAnchor;
+    document.body.style.overflowAnchor = 'none';
+    const html = document.documentElement;
+    const prevBehavior = html.style.scrollBehavior;
+    html.style.scrollBehavior = 'auto';
+    window.scrollTo({ top: preTop, behavior: 'auto' });
+    ScrollTrigger.clearScrollMemory();
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        deckIndexRef.current = 0;
+        closeInspectionRef.current(false);
+        setFilter(option);
+        window.requestAnimationFrame(() => {
+          window.requestAnimationFrame(() => {
+            ScrollTrigger.refresh();
+            // Rebuilt trigger wins when there is one; otherwise re-derive
+            // the section top (frozen layout may have shifted it) with the
+            // same desktop/mobile rule as the pre-jump.
+            const st = projectsTriggerRef.current;
+            const freshTop = section.getBoundingClientRect().top + window.scrollY;
+            const target = st ? st.start : (desktopDeck ? freshTop : freshTop - headerOffset + 1);
+            window.scrollTo({ top: target, behavior: 'auto' });
+            section.style.minHeight = prevMinHeight;
+            ScrollTrigger.clearScrollMemory();
+            ScrollTrigger.refresh();
+            const st2 = projectsTriggerRef.current;
+            const freshTop2 = section.getBoundingClientRect().top + window.scrollY;
+            window.scrollTo({ top: st2 ? st2.start : (desktopDeck ? freshTop2 : freshTop2 - headerOffset + 1), behavior: 'auto' });
+            document.body.style.overflowAnchor = prevAnchor;
+            html.style.scrollBehavior = prevBehavior;
+          });
+        });
+      });
+    });
   };
 
   const openProject = (project: Project) => {
-    setExpandedProjects((current) => current.includes(project.id) ? current : [...current, project.id]);
-    scrollToSection('projects', 'Projects', false);
+    scrollToSection('projects', 'Projects');
     // immediate — no smooth/scrub lag
     const el = document.getElementById(project.id);
     if (el) window.setTimeout(() => el.scrollIntoView({ behavior: 'auto', block: 'center' }), 20);
@@ -278,6 +412,22 @@ function App({ ssr = false }: { ssr?: boolean }) {
     setInspectionProject(project);
     setPaletteOpen(false);
   };
+
+  // Single funnel for every case-file dialog close: chrome button, backdrop
+  // click, Esc, filter change, unmount (the body lock restore lives in the
+  // modal's own effect cleanup, so it runs on every path including unmount).
+  // Restores focus to the originating card without scrolling the page.
+  const closeInspection = (restoreFocus = true) => {
+    const id = inspectionProjectRef.current?.id;
+    setInspectionProject(null);
+    if (restoreFocus && id) {
+      window.requestAnimationFrame(() => {
+        document.getElementById(id)?.querySelector<HTMLButtonElement>('.project-jump')?.focus({ preventScroll: true });
+      });
+    }
+  };
+  const closeInspectionRef = useRef(closeInspection);
+  closeInspectionRef.current = closeInspection;
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -314,14 +464,8 @@ function App({ ssr = false }: { ssr?: boolean }) {
     return () => mediaQuery.removeEventListener('change', updateMotion);
   }, []);
 
+  // Hero intro — runs once on mount, no delay
   useEffect(() => {
-    const timeout = window.setTimeout(() => setBooting(false), reducedMotion ? 700 : 1250);
-    return () => window.clearTimeout(timeout);
-  }, [reducedMotion]);
-
-  // Hero intro — runs once right after boot screen lifts, no delay
-  useEffect(() => {
-    if (booting) return;
     if (reducedMotion) {
       gsap.set(['.hero-kicker', '.hero-index', '#hero-title', '.hero-role', '.hero-intro', '.hero-actions .button', '.hero-portrait', '.hero-footer'], { clearProps: 'all' });
       return;
@@ -340,38 +484,15 @@ function App({ ssr = false }: { ssr?: boolean }) {
         .from('.hero-footer', { autoAlpha: 0, duration: 0.35 }, 0.55);
     });
     return () => ctx.revert();
-  }, [booting, reducedMotion]);
-
-  useEffect(() => {
-    const role = 'Full-stack Developer';
-    if (reducedMotion) {
-      setTypedRole(role);
-      return undefined;
-    }
-    setTypedRole('');
-    let index = 0;
-    const interval = window.setInterval(() => {
-      index += 1;
-      setTypedRole(role.slice(0, index));
-      if (index === role.length) window.clearInterval(interval);
-    }, 68);
-    return () => window.clearInterval(interval);
   }, [reducedMotion]);
 
   useEffect(() => {
     let ticking = false;
     const updateActiveSection = () => {
       ticking = false;
-      // Single shared value: measured sticky header height (69px fallback).
-      const headerLine = Math.ceil(document.querySelector('.site-header')?.getBoundingClientRect().height ?? 69);
-      let current: string | null = null;
-      for (const id of sectionOrder) {
-        const section = document.getElementById(id);
-        if (!section) continue;
-        const rect = section.getBoundingClientRect();
-        if (rect.top <= headerLine) current = id;
-      }
-      setActiveSection(navSectionFor[current ?? 'hero'] ?? 'hero');
+      if (spyLockRef.current) return;
+      setActiveSection(readActiveNav());
+      updateRailTones();
     };
     const onScroll = () => {
       if (!ticking) {
@@ -379,9 +500,32 @@ function App({ ssr = false }: { ssr?: boolean }) {
         window.requestAnimationFrame(updateActiveSection);
       }
     };
+    const onScrollEnd = () => {
+      spyLockRef.current = false;
+      window.clearTimeout(spyTimerRef.current);
+    };
     updateActiveSection();
     window.addEventListener('scroll', onScroll, { passive: true });
-    return () => window.removeEventListener('scroll', onScroll);
+    window.addEventListener('scrollend', onScrollEnd);
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      window.removeEventListener('scrollend', onScrollEnd);
+    };
+  }, []);
+
+  // Re-measure pins after viewport changes settle (fonts already refresh
+  // via the header-sync effect).
+  useEffect(() => {
+    let timer = 0;
+    const onResize = () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => ScrollTrigger.refresh(), 150);
+    };
+    window.addEventListener('resize', onResize);
+    return () => {
+      window.removeEventListener('resize', onResize);
+      window.clearTimeout(timer);
+    };
   }, []);
 
   useEffect(() => {
@@ -393,7 +537,7 @@ function App({ ssr = false }: { ssr?: boolean }) {
       if (event.key === 'Escape') {
         setPaletteOpen(false);
         setMobileNavOpen(false);
-        setInspectionProject(null);
+        closeInspectionRef.current();
       }
     };
     window.addEventListener('keydown', handleShortcut);
@@ -404,7 +548,6 @@ function App({ ssr = false }: { ssr?: boolean }) {
     if (paletteOpen) {
       setPaletteQuery('');
       setSelectedCommand(0);
-      setHasOpenedPalette(true);
       window.setTimeout(() => paletteInputRef.current?.focus(), 40);
       // STEP 2: lock body scroll while the palette is open (restored on close).
       const prevOverflow = document.body.style.overflow;
@@ -430,7 +573,7 @@ function App({ ssr = false }: { ssr?: boolean }) {
     setRoute({ kind: 'home' });
     setMobileNavOpen(false);
     setPaletteOpen(false);
-    scrollToSection(slug, label, false);
+    scrollToSection(slug, label);
   };
 
   const openPaletteFrom404 = () => {
@@ -446,17 +589,17 @@ function App({ ssr = false }: { ssr?: boolean }) {
     return () => window.removeEventListener('popstate', onPopState);
   }, []);
 
-  // Deep link: after boot (pins exist), jump straight to the section.
+  // Deep link: jump straight to the section (pins exist after mount).
   useEffect(() => {
-    if (!booting && route.kind === 'section') {
-      scrollToSection(route.id, route.label, false);
+    if (route.kind === 'section') {
+      scrollToSection(route.id, route.label);
     }
-  }, [booting, route]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [route]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (route.kind !== 'missing') return undefined;
     const prevTitle = document.title;
-    document.title = '404 // ROUTE NOT FOUND — JEDV';
+    document.title = '404 // ROUTE NOT FOUND: JEDV';
     return () => { document.title = prevTitle; };
   }, [route]);
 
@@ -516,21 +659,15 @@ function App({ ssr = false }: { ssr?: boolean }) {
     });
   };
 
-  // STEP 2: keep pin geometry in sync with expand/collapse.
-  // Recomputes pin distance/end/snap slots after the DOM changes size, and
-  // records a deck lock so scrolling can't switch cards mid-read.
+  // Keep pin geometry in sync after filter swaps (DOM size changed).
   useEffect(() => {
-    const firstExpanded = visibleProjects.findIndex((project) => expandedProjects.includes(project.id));
-    deckLockRef.current = firstExpanded >= 0
-      ? { locked: true, index: firstExpanded }
-      : { locked: false, index: deckLockRef.current.index };
     scheduleProjectsRefresh();
-    // STEP 4: re-sync to the (possibly locked) card immediately; pin
-    // geometry refresh follows on the next frame. Desktop-only: on mobile
-    // the cards are a static list with no trigger to sync to.
+    // Re-sync to the current card immediately; pin geometry refresh follows
+    // on the next frame. Desktop-only: on mobile the cards are a static
+    // list with no trigger to sync to.
     if (isDesktopDeck()) deckSettleRef.current?.();
     return () => window.cancelAnimationFrame(projectsRefreshRaf.current);
-  }, [expandedProjects, filter]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [filter]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // STEP 2: container resizes (stage/list, incl. case-file expand) refresh pins.
   useEffect(() => {
@@ -609,7 +746,6 @@ function App({ ssr = false }: { ssr?: boolean }) {
       const target = event.target as HTMLElement | null;
       if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable)) return;
       if (document.querySelector('.command-palette') || document.querySelector('.inspection-dialog')) return;
-      if (deckLockRef.current.locked) return; // mid-read: hold the card, like wheel
       const trigger = projectsTriggerRef.current;
       if (!trigger) return;
       // Engage anywhere inside the pin span (inclusive). isActive alone
@@ -688,20 +824,16 @@ function App({ ssr = false }: { ssr?: boolean }) {
             };
 
             // Target is always derived from current progress (position),
-            // never from tween progress. Honors the read-lock from Step 2.
+            // never from tween progress.
             const indexFromProgress = (progress: number) => {
               const count = projectCards.length;
               const raw = Math.round(progress * (count - 1));
-              const clamped = Math.max(0, Math.min(count - 1, raw));
-              if (deckLockRef.current.locked) {
-                return Math.max(0, Math.min(count - 1, deckLockRef.current.index));
-              }
-              return clamped;
+              return Math.max(0, Math.min(count - 1, raw));
             };
 
           gsap.set(projectCards, { autoAlpha: 1, x: 0, y: 0, scale: 0.94, rotation: 0, zIndex: 0 });
           gsap.set(projectCardContents, { autoAlpha: 0 });
-          setActiveCard(Math.max(0, Math.min(projectCards.length - 1, deckLockRef.current.locked ? deckLockRef.current.index : 0)), 0);
+          setActiveCard(0, 0);
           deckSettleRef.current = () => setActiveCard(indexFromProgress(projectsTriggerRef.current?.progress ?? 0), 0);
           // Scrub now drives ONLY pin/progress. Card visuals are set by
           // setActiveCard from onUpdate (position-derived), not by timeline
@@ -709,7 +841,7 @@ function App({ ssr = false }: { ssr?: boolean }) {
           const projectTimeline = gsap.timeline({
             scrollTrigger: {
               trigger: projectsFrame,
-              start: 'top top',
+              start: PROJECTS_PIN_START,
               end: () => `+=${getProjectDistance()}`,
               pin: true,
               pinSpacing: true,
@@ -738,13 +870,33 @@ function App({ ssr = false }: { ssr?: boolean }) {
           });
           projectsTriggerRef.current = projectTimeline.scrollTrigger ?? null;
           ScrollTrigger.refresh();
+        } else {
+          // 0 or 1 card: no pin, no snap. Strip any inline visuals the
+          // previous deck wrote (React reuses DOM nodes across filters, so
+          // a kept card could otherwise stay at autoAlpha 0 or an old
+          // transform) and park the active index at the start.
+          projectsTriggerRef.current = null;
+          deckSettleRef.current = null;
+          deckIndexRef.current = 0;
+          gsap.set(projectCards, { clearProps: 'all' });
+          gsap.set(projectCardContents, { clearProps: 'all' });
         }
 
         timelineViewport.scrollLeft = 0;
         gsap.set(timelineTrack, { x: 0 });
-        // scrollWidth includes start cap + end cap + trailing padding-right,
-        // so the extra width is already in the distance.
-        const getTimelineDistance = () => Math.max(timelineTrack.scrollWidth - timelineViewport.clientWidth, 0);
+        // Travel so the LAST entry's center lands on the viewport center at
+        // progress 1. Measured from the last card's true center (offsetLeft +
+        // half width), not from scrollWidth: the track translates past its
+        // own right edge and the trailing paper gap reads as end padding.
+        // Function-based x + end with invalidateOnRefresh (below) recompute
+        // exact centers on resize, fonts, and late images.
+        const getLastEntryCenter = () => {
+          const entries = timelineTrack.querySelectorAll<HTMLElement>('.timeline-entry');
+          const last = entries[entries.length - 1];
+          if (!last) return 0;
+          return last.offsetLeft + last.offsetWidth / 2;
+        };
+        const getTimelineDistance = () => Math.max(getLastEntryCenter() - timelineViewport.clientWidth / 2, 0);
         // Marker-anchored progress fill driven by the existing horizontal
         // ScrollTrigger — no second trigger. Geometry note: a literal
         // `fill = readingLine - trackX` head cannot satisfy both end stops
@@ -918,21 +1070,6 @@ function App({ ssr = false }: { ssr?: boolean }) {
           gsap.set(projectCards, { clearProps: 'all' });
           gsap.set(projectCardContents, { clearProps: 'all' });
         };
-      });
-      matchMedia.add('(prefers-reduced-motion: no-preference)', () => {
-        const revealTargets = gsap.utils.toArray<HTMLElement>('.section-scroll-reveal');
-        if (!revealTargets.length) return undefined;
-        gsap.set(revealTargets, { autoAlpha: 0, y: 20 });
-        ScrollTrigger.batch(revealTargets, {
-          start: 'top 88%',
-          onEnter: (elements) => gsap.to(elements, { autoAlpha: 1, y: 0, duration: 0.55, stagger: 0.08, ease: 'power2.out', overwrite: 'auto' }),
-          onEnterBack: (elements) => gsap.to(elements, { autoAlpha: 1, y: 0, duration: 0.35, stagger: 0.06, ease: 'power2.out', overwrite: 'auto' }),
-          // STEP 5: no longer a one-way latch. Leave resets instantly
-          // (gsap.set = discrete canonical state, can't strand partial
-          // alpha); re-entering replays the tween with overwrite:'auto'.
-          onLeave: (elements) => gsap.set(elements, { autoAlpha: 0, y: 20, overwrite: 'auto' }),
-          onLeaveBack: (elements) => gsap.set(elements, { autoAlpha: 0, y: 20, overwrite: 'auto' }),
-        });
       });
       ScrollTrigger.refresh();
     });
@@ -1111,9 +1248,7 @@ function App({ ssr = false }: { ssr?: boolean }) {
   return (
     <div className="site-shell">
       <div className="noise-layer" aria-hidden="true" />
-      <ScrollProgress />
       <SectionRail activeSection={activeSection} scrollToSection={scrollToSection} />
-      {booting && !ssr && <BootScreen />}
       <Header activeSection={activeSection} mobileNavOpen={mobileNavOpen} setMobileNavOpen={setMobileNavOpen} openPalette={() => setPaletteOpen(true)} scrollToSection={scrollToSection} />
 
       {route.kind === 'missing' ? (
@@ -1123,44 +1258,35 @@ function App({ ssr = false }: { ssr?: boolean }) {
       ) : (
       <main>
         <ErrorBoundary name="Hero" variant="section">
-        <section className="hero-section" aria-labelledby="hero-title">
+        <section className="hero-section" data-theme={theme === 'dark' ? 'dark' : 'light'} id="hero" aria-labelledby="hero-title">
           <div className="hero-grid" aria-hidden="true" />
           <div className="container hero-content">
             <div className="hero-copy reveal-on-load">
-              <div className="hero-kicker"><span className="live-signal" />Available for new systems <span className="kicker-rule" /> 09.2026</div>
+              <div className="hero-kicker">Available for new projects <span className="kicker-rule" /> Nasugbu / Remote</div>
               <p className="hero-index">7 / SYSTEMS SHIPPED <span>·</span> 5 / CLIENTS SERVED</p>
               <h1 id="hero-title">John Eduard<br /><em>De Villa</em></h1>
-              <div className="hero-role"><span className="typewriter" aria-label="Full-stack Developer"><span aria-hidden="true">{typedRole}</span><span className="type-caret" aria-hidden="true" /></span><span className="hero-location">Nasugbu, Batangas, Philippines</span></div>
-              <p className="hero-intro">7 systems shipped for 5 clients — HILOM EHR now encrypts 28 tables with AES-256-GCM for a live medical center. From auth workflows to offline poultry sensors, I own the stack solo, end-to-end, while finishing my BSIT.</p>
+              <div className="hero-role"><span>Full-stack Developer, solo and end-to-end</span><span className="hero-location">Nasugbu, Batangas, Philippines</span></div>
+              <p className="hero-intro">7 systems shipped for 5 clients. HILOM EHR now encrypts 28 tables with AES-256-GCM for a live medical center. From auth workflows to offline poultry sensors, I own the stack solo, end-to-end, while finishing my BSIT.</p>
               <HeroPortrait variant="inline" />
               <div className="hero-actions">
                 <button className="button button-primary" onClick={() => scrollToSection('projects', 'Projects')}>See production work <ArrowUpRight /></button>
-                <button className={`button button-console ${!hasOpenedPalette ? 'palette-hint' : ''}`} onClick={() => setPaletteOpen(true)}><span className="button-prompt">$</span> Open command palette <kbd>⌘K</kbd></button>
               </div>
             </div>
             <HeroPortrait variant="side" />
           </div>
-          <div className="hero-footer container" aria-hidden="true"><span>01 / INTRODUCTION</span><span>SCROLL TO INSPECT <span className="scroll-cue">↓</span></span></div>
+          <div className="hero-footer container" aria-hidden="true"><span>INTRODUCTION</span><span>SCROLL TO INSPECT <span className="scroll-cue">↓</span></span></div>
         </section>
         </ErrorBoundary>
 
-        <ErrorBoundary name="Tech marquee" variant="section">
-        <TechMarquee paused={marqueePaused} setPaused={setMarqueePaused} />
-        </ErrorBoundary>
-
         <ErrorBoundary name="About" variant="section">
-        <section className="paper-section about-section" id="about" aria-labelledby="about-title">
+        <section className="paper-section about-section" data-theme="light" id="about" aria-labelledby="about-title">
           <div className="container">
             <div className="section-heading-row">
               <div><h2 id="about-title">What I do &amp;<br /><em>how I work</em></h2></div>
-              <div className="heading-side">
-                <SectionLabel>About &amp; Stack</SectionLabel>
-                <p className="section-subheading">I build for clients, not grades</p>
-              </div>
             </div>
             <div className="about-layout">
-              <div className="about-statement"><p>I build real, deployed systems for actual clients, not just class exercises. From EHR schema design to IoT sensor pipelines, I work solo, end-to-end, delivering production software while finishing my degree.</p><span className="margin-note">FIELD NOTE 001</span></div>
-              <div className="about-approach"><div className="mini-heading">Approach / 02 — solo, end-to-end</div><p>I scope, schema-design, build, and ship myself. To move fast without cutting corners I run an AI-assisted loop — <strong>Opencode</strong> for codebase analysis, <strong>Claude Code</strong> for implementation, <strong>Cursor</strong> for review — then verify manually. Same hands wire the hardware: Linux Hyprland/Omarchy, Raspberry Pi 5 + Arduino (DHT22, IR break-beam) for the farm.</p></div>
+              <div className="about-statement"><p>I ship systems people depend on. HILOM handles patient records. LayRate counts eggs without internet. I design the schema, write the auth, wire the sensor, and answer for it. I do this solo while finishing my BSIT.</p></div>
+              <div className="about-approach"><p>I scope, schema-design, build, and ship myself. To move fast without cutting corners I run an AI-assisted loop: <strong>Opencode</strong> for codebase analysis, <strong>Claude Code</strong> for implementation, <strong>Cursor</strong> for review. I verify everything manually. Same hands wire the hardware: Linux Hyprland/Omarchy, Raspberry Pi 5 + Arduino (DHT22, IR break-beam) for the farm.</p></div>
               <StatusPanel />
             </div>
           </div>
@@ -1168,16 +1294,12 @@ function App({ ssr = false }: { ssr?: boolean }) {
         </ErrorBoundary>
 
         <ErrorBoundary name="Skills" variant="section">
-        <section className="paper-section stack-section" id="skills" aria-labelledby="skills-title">
+        <section className="paper-section stack-section" data-theme="light" id="skills" aria-labelledby="skills-title">
           <div className="container">
             <div className="section-heading-row">
               <div><h2 id="skills-title">Stack<br /><em>inventory</em></h2></div>
-              <div className="heading-side">
-                <p className="section-label"><span className="label-dot" aria-hidden="true" />08 groups</p>
-                <p className="section-subheading">Tools in the field</p>
-              </div>
             </div>
-            <div className="skills-grid">{skillGroups.map((group, i) => <SkillGroup key={group.label} index={String(i + 1).padStart(2, '0')} label={group.label} items={group.items} />)}</div>
+            <div className="skills-grid">{skillGroups.map((group) => <SkillGroup key={group.label} label={group.label} items={group.items} />)}</div>
           </div>
         </section>
         </ErrorBoundary>
@@ -1187,12 +1309,11 @@ function App({ ssr = false }: { ssr?: boolean }) {
         </ErrorBoundary>
 
         <ErrorBoundary name="Projects" variant="section">
-        <section className="ink-section projects-section" id="projects" aria-labelledby="projects-title">
+        <section className="ink-section projects-section" data-theme={theme === 'dark' ? 'dark' : 'light'} id="projects" aria-labelledby="projects-title">
             <div ref={projectsFrameRef} className="container projects-pin-frame">
               <div className="projects-intro">
               <div className="section-heading-row projects-heading"><div><h2 id="projects-title">Production systems<br /><em>I’ve built</em></h2></div><div className="heading-side"><SectionLabel>Featured Projects</SectionLabel><p className="section-subheading">Evidence over adjectives.<br />Open a case file.</p></div></div>
-              <div className="filter-bar" role="tablist" aria-label="Filter projects by status">{filters.map((option) => <button key={option} className={`filter-button ${filter === option ? 'is-selected' : ''}`} role="tab" aria-selected={filter === option} onClick={() => setFilter(option)}><span className="filter-count">{option === 'All' ? projects.length : projects.filter((project) => project.status === option).length}</span>{option}</button>)}</div>
-              </div><div className="projects-scroll-stage" ref={projectsStageRef}><div className="project-list project-deck" ref={projectListRef}>{visibleProjects.map((project) => <ProjectCard key={project.id} project={project} expanded={expandedProjects.includes(project.id)} toggleProject={toggleProject} inspectProject={openInspection} />)}</div></div>
+              </div><div className="filter-bar" role="tablist" aria-label="Filter projects by status">{filters.map((option) => <button key={option} className={`filter-button ${filter === option ? 'is-selected' : ''}`} role="tab" aria-selected={filter === option} onPointerDown={(event) => { if (event.pointerType === 'mouse') { filterPressRef.current = true; handleFilterChange(option); } }} onClick={() => { if (filterPressRef.current) filterPressRef.current = false; else handleFilterChange(option); }}><span className="filter-count">{option === 'All' ? projects.length : projects.filter((project) => project.status === option).length}</span>{option}</button>)}</div><div className="projects-scroll-stage" ref={projectsStageRef}><div className="project-list project-deck" ref={projectListRef}>{visibleProjects.map((project) => <ProjectCard key={project.id} project={project} inspectProject={openInspection} />)}{visibleProjects.length === 0 && <EmptyDeckCard resetFilter={() => handleFilterChange('All')} />}</div></div>
 </div>
         </section>
         </ErrorBoundary>
@@ -1202,12 +1323,12 @@ function App({ ssr = false }: { ssr?: boolean }) {
         </ErrorBoundary>
 
         <ErrorBoundary name="Certifications" variant="section">
-        <CertificationsSection />
+        <CertificationsSection theme={theme} />
         </ErrorBoundary>
 
         <ErrorBoundary name="Contact" variant="section">
-        <section className="contact-section" id="contact" aria-labelledby="contact-title">
-          <div className="container contact-layout"><div><SectionLabel>Contact</SectionLabel><h2 id="contact-title">Let’s talk about<br /><em>your system</em></h2></div><div className="contact-copy section-scroll-reveal"><p>I&apos;m available for new projects, freelance work, and collaborations. Email works best. I reply within 24 hours.</p><button className="email-button" onClick={copyEmail} aria-label={`Copy ${email}`}><span className="email-prefix">mailto://</span>{email}<ArrowUpRight /></button><div className="contact-meta"><span>Nasugbu, Batangas, Philippines</span><div className="social-row" aria-label="Social links"><a className="social-link" href="https://github.com/23-74173-cpu" target="_blank" rel="noreferrer"><SocialIcon network="github" />GitHub</a><a className="social-link" href="https://web.facebook.com/joed.devilla/" target="_blank" rel="noreferrer"><SocialIcon network="facebook" />Facebook</a><a className="social-link" href="https://www.linkedin.com/in/john-eduard-de-villa-78689935a/" target="_blank" rel="noreferrer"><SocialIcon network="linkedin" />LinkedIn</a></div></div><button className="resume-button" onClick={downloadResume}>{resumeState === 'preparing' ? 'Preparing…' : resumeState === 'saved' ? '✓ Saved' : 'Download Résumé'}<ArrowUpRight /></button></div></div>
+        <section className="contact-section" data-theme="light" id="contact" aria-labelledby="contact-title">
+          <div className="container contact-layout"><div><h2 id="contact-title">Let’s talk about<br /><em>your system</em></h2></div><div className="contact-copy"><p>If you have a system that needs shipping, email me with what it has to do and when it has to work.</p><button className="email-button" onClick={copyEmail} aria-label={`Copy ${email}`}><span className="email-prefix">mailto://</span>{email}<ArrowUpRight /></button><div className="contact-meta"><span>Nasugbu, Batangas, Philippines</span><div className="social-row" aria-label="Social links"><a className="social-link" href="https://github.com/23-74173-cpu" target="_blank" rel="noreferrer"><SocialIcon network="github" />GitHub</a><a className="social-link" href="https://web.facebook.com/joed.devilla/" target="_blank" rel="noreferrer"><SocialIcon network="facebook" />Facebook</a><a className="social-link" href="https://www.linkedin.com/in/john-eduard-de-villa-78689935a/" target="_blank" rel="noreferrer"><SocialIcon network="linkedin" />LinkedIn</a></div></div><button className="resume-button" onClick={downloadResume}>{resumeState === 'preparing' ? 'Preparing…' : resumeState === 'saved' ? '✓ Saved' : 'Download Résumé'}<ArrowUpRight /></button></div></div>
         </section>
         </ErrorBoundary>
       </main>
@@ -1218,61 +1339,15 @@ function App({ ssr = false }: { ssr?: boolean }) {
       <div className="toast-region" aria-live="polite" aria-atomic="true">{toasts.map((toast) => <div className="toast" key={toast.id}><span className="toast-mark">✓</span>{toast.message}</div>)}</div>
 
       {paletteOpen && <CommandPalette inputRef={paletteInputRef} query={paletteQuery} setQuery={setPaletteQuery} selectedCommand={selectedCommand} setSelectedCommand={setSelectedCommand} commands={matchingCommands} onKeyDown={handlePaletteKeyDown} close={() => setPaletteOpen(false)} />}
-      {inspectionProject && <InspectionModal project={inspectionProject} close={() => setInspectionProject(null)} />}
+      {inspectionProject && <InspectionModal project={inspectionProject} close={() => closeInspection()} />}
     </div>
   );
-}
-
-function ScrollProgress() {
-  const readoutRef = useRef<HTMLDivElement>(null);
-  const idleTimer = useRef(0);
-
-  useEffect(() => {
-    let raf = 0;
-    let queued = false;
-    const update = (markActive: boolean) => {
-      queued = false;
-      // progress = scrollY / (scrollHeight - innerHeight), clamped 0–1.
-      // Pin spacing + expanded case files change scrollHeight, so read it fresh.
-      const max = document.documentElement.scrollHeight - window.innerHeight;
-      const progress = max > 0 ? Math.min(1, Math.max(0, window.scrollY / max)) : 0;
-      // Mono readout only (top progress bar removed) — zero-padded so digits never jitter.
-      const readout = readoutRef.current;
-      if (readout) {
-        readout.textContent = `${String(Math.round(progress * 100)).padStart(3, '0')}%`;
-        if (markActive) {
-          readout.classList.add('is-visible');
-          window.clearTimeout(idleTimer.current);
-          idleTimer.current = window.setTimeout(() => readout.classList.remove('is-visible'), 1200);
-        }
-      }
-    };
-    const schedule = () => {
-      if (!queued) {
-        queued = true;
-        raf = window.requestAnimationFrame(() => update(true));
-      }
-    };
-    update(false);
-    window.addEventListener('scroll', schedule, { passive: true });
-    window.addEventListener('resize', schedule);
-    ScrollTrigger.addEventListener('refresh', schedule);
-    return () => {
-      window.removeEventListener('scroll', schedule);
-      window.removeEventListener('resize', schedule);
-      ScrollTrigger.removeEventListener('refresh', schedule);
-      window.cancelAnimationFrame(raf);
-      window.clearTimeout(idleTimer.current);
-    };
-  }, []);
-
-  return <div ref={readoutRef} className="scroll-readout" aria-hidden="true">000%</div>;
 }
 
 function SectionRail({ activeSection, scrollToSection }: { activeSection: string; scrollToSection: (id: string, label: string) => void }) {
   return (
     <nav className="section-rail" aria-label="Section navigation">
-      {railItems.map((item, index) => (
+      {railItems.map((item) => (
         <button
           key={item.id}
           className={`rail-tick${activeSection === item.id ? ' is-active' : ''}`}
@@ -1280,16 +1355,12 @@ function SectionRail({ activeSection, scrollToSection }: { activeSection: string
           aria-label={`Go to ${item.label}`}
           aria-current={activeSection === item.id ? 'true' : undefined}
         >
-          <span className="rail-label" aria-hidden="true">{String(index + 1).padStart(2, '0')} / {item.label}</span>
+          <span className="rail-label" aria-hidden="true">{item.label}</span>
           <span className="tick-bar" aria-hidden="true" />
         </button>
       ))}
     </nav>
   );
-}
-
-function BootScreen() {
-  return <div className="boot-screen" role="status" aria-label="Initializing JEDV portfolio"><div className="boot-console"><div className="boot-console-top"><span className="palette-lights" aria-hidden="true"><i /><i /><i /></span><span>JEDV / SYSTEM MAP</span><span>BOOT 01</span></div><div className="boot-mark">JEDV<span>_</span></div><div className="boot-lines"><p><span>&gt;</span> Establishing field connection</p><p><span>&gt;</span> Loading production archive</p><p><span>&gt;</span> Mounting interface</p></div><div className="boot-progress"><span /></div><div className="boot-status"><span>INITIALIZING</span><span>PLEASE WAIT</span></div></div></div>;
 }
 
 function Header({ activeSection, mobileNavOpen, setMobileNavOpen, openPalette, scrollToSection }: { activeSection: string; mobileNavOpen: boolean; setMobileNavOpen: (open: boolean) => void; openPalette: () => void; scrollToSection: (id: string, label: string) => void }) {
@@ -1301,8 +1372,8 @@ function HeroPortrait({ variant }: { variant: 'side' | 'inline' }) {
   // intro tween (y + fade on .hero-portrait) is the entrance reveal.
   return (
     <figure className={`hero-portrait hero-portrait--${variant}`} aria-label="Portrait of John Eduard De Villa">
-      <div className="hero-portrait-top"><span>JEDV / PORTRAIT</span><span className="hero-portrait-status"><span className="live-signal" aria-hidden="true" />ONLINE</span></div>
-      <div className="hero-portrait-frame">
+      <div className="hero-portrait-top"><span>JEDV / PORTRAIT</span><span>SOLO</span></div>
+      <div className="hero-portrait-frame" onContextMenu={(event) => event.preventDefault()}>
         <picture className="hero-portrait-img">
           <source srcSet="/PixProfilePic.avif" type="image/avif" />
           <source srcSet="/PixProfilePic.webp" type="image/webp" />
@@ -1314,29 +1385,23 @@ function HeroPortrait({ variant }: { variant: 'side' | 'inline' }) {
             loading="eager"
             decoding="async"
             fetchPriority="high"
+            draggable={false}
+            className="no-copy-img"
           />
         </picture>
+        <span className="hero-portrait-veil" aria-hidden="true" />
       </div>
-      <div className="hero-portrait-bottom"><span>BUILD MODE: SOLO</span></div>
     </figure>
   );
-}
-
-function TechMarquee({ paused, setPaused }: { paused: boolean; setPaused: (paused: boolean) => void }) {
-  return <section className="marquee-section" aria-label="Technology stack"><div className="marquee-header"><span>TOOLS IN THE FIELD</span><button className="marquee-toggle" onClick={() => setPaused(!paused)} aria-pressed={paused}>{paused ? 'Play strip' : 'Pause strip'} <span aria-hidden="true">{paused ? '▶' : 'Ⅱ'}</span></button></div><div className={`marquee-viewport ${paused ? 'is-paused' : ''}`}><div className="marquee-track">{technologies.map((technology) => <span className="tech-item" key={technology}><span className="tech-mark" aria-hidden="true">+</span>{technology}</span>)}{technologies.map((technology) => <span className="tech-item" key={`${technology}-duplicate`} aria-hidden="true"><span className="tech-mark" aria-hidden="true">+</span>{technology}</span>)}</div></div></section>;
 }
 
 function GitHubActivity() {
   const [chartFailed, setChartFailed] = useState(false);
   return (
-    <section className="github-section" id="github" aria-labelledby="github-title">
+      <section className="github-section" data-theme="light" id="github" aria-labelledby="github-title">
       <div className="container">
         <div className="section-heading-row">
           <div><h2 id="github-title">Commit<br /><em>activity</em></h2></div>
-          <div className="heading-side">
-            <p className="section-label"><span className="label-dot" aria-hidden="true" />GitHub</p>
-            <p className="section-subheading">Daily pushes — live from Git</p>
-          </div>
         </div>
         <div className="github-grid-wrap">
           <div className="github-chart-frame">
@@ -1366,7 +1431,8 @@ function GitHubActivity() {
                     // effect absorbs any residual drift.
                     width="663"
                     height="104"
-                    className="github-chart-img"
+                    className="github-chart-img no-copy-img"
+                    draggable={false}
                     onError={() => setChartFailed(true)}
                   />
                 </a>
@@ -1385,16 +1451,24 @@ function GitHubActivity() {
 }
 
 function StatusPanel() {
-  return <div className="status-panel"><div className="mini-heading">Current status / 03</div><dl><div><dt>Education</dt><dd>4th-year BSIT, Business Analytics<br />Batangas State University, ARASOF Nasugbu</dd></div><div><dt>Location</dt><dd>Nasugbu, Batangas, Philippines</dd></div><div><dt>Workflow</dt><dd>Solo, end-to-end, AI-assisted</dd></div></dl></div>;
+  return <div className="status-panel"><dl><div><dt>Education</dt><dd>4th-year BSIT, Business Analytics<br />Batangas State University, ARASOF Nasugbu</dd></div><div><dt>Location</dt><dd>Nasugbu, Batangas, Philippines</dd></div><div><dt>Workflow</dt><dd>Solo, end-to-end, AI-assisted</dd></div></dl></div>;
 }
 
-function SkillGroup({ index, label, items }: { index: string; label: string; items: string[] }) {
-  return <div className="skill-group"><h3 data-index={index}>{label}</h3><div className="pill-list">{items.map((item) => <span className="skill-pill" key={item}><SkillIcon name={item} />{item}</span>)}</div></div>;
+function SkillGroup({ label, items }: { label: string; items: string[] }) {
+  return <div className="skill-group"><h3>{label}</h3><div className="pill-list">{items.map((item) => <span className="skill-pill" key={item}><SkillIcon name={item} />{item}</span>)}</div></div>;
 }
 
-function ProjectCard({ project, expanded, toggleProject, inspectProject }: { project: Project; expanded: boolean; toggleProject: (id: string) => void; inspectProject: (project: Project) => void }) {
-  const detailId = `${project.id}-details`;
-  return <article className={`project-card project-${project.status.toLowerCase().replace(' ', '-')}`} id={project.id}><div className="project-card-content"><div className="project-number" aria-hidden="true">{project.number}</div><div className="project-main"><div className="project-topline"><StatusBadge status={project.status} /><span className="project-repo">Repo coming soon</span></div><h3>{project.title}</h3><p className="project-subtitle">{project.subtitle}</p><div className="project-impact"><span>Impact</span><p>{project.impact}</p></div><div className="stack-row" aria-label={`${project.title} technology stack`}>{project.stack.map((item) => <span key={item}>{item}</span>)}</div></div><div className="project-controls"><button className="details-button" aria-expanded={expanded} aria-controls={detailId} onClick={() => toggleProject(project.id)}>{expanded ? 'Close case file' : 'Read case file'}<span className="plus-icon" aria-hidden="true">{expanded ? '−' : '+'}</span></button><button className="project-jump" onClick={() => inspectProject(project)} aria-label={`Inspect ${project.title}`}>Inspect <ArrowUpRight /></button></div>{expanded && <div className="project-details" id={detailId}><div className="details-label">CASE FILE / BUILD NOTES</div><ul>{project.details.map((detail) => <li key={detail}>{detail}</li>)}</ul></div>}</div></article>;
+function ProjectCard({ project, inspectProject }: { project: Project; inspectProject: (project: Project) => void }) {
+  const longTitle = project.title.length > 24;
+  return <article className={`project-card project-${project.status.toLowerCase().replace(' ', '-')}`} id={project.id}><div className="project-card-content"><div className="project-number" aria-hidden="true">{project.number}</div><div className="project-main"><div className="project-topline"><StatusBadge status={project.status} /><span className="project-repo">Repo coming soon</span></div><h3 className={longTitle ? 'project-title-long' : undefined}>{project.title}</h3>{project.subtitle && <p className="project-subtitle">{project.subtitle}</p>}{project.impact && <div className="project-impact"><span>Impact</span><p>{project.impact}</p></div>}{project.stack.length > 0 && <div className="stack-row" aria-label={`${project.title} technology stack`}>{project.stack.map((item) => <span key={item}>{item}</span>)}</div>}</div><div className="project-controls"><button className="project-jump" onClick={() => inspectProject(project)} aria-label={`Inspect ${project.title}`}>Inspect <ArrowUpRight /></button></div>{project.details.length > 0 && <div className="project-details"><div className="details-label">CASE FILE / BUILD NOTES</div><ul>{project.details.map((detail) => <li key={detail}>{detail}</li>)}</ul></div>}</div></article>;
+}
+
+// Placeholder deck card for the 0-result filter. Same markup, size and
+// classes as a real card (so the deck query and layout stay stable), but
+// inert: no project number, no case file, not counted anywhere.
+function EmptyDeckCard({ resetFilter }: { resetFilter: () => void }) {
+  const pressRef = useRef(false);
+  return <article className="project-card project-card-empty" aria-label="No projects match this filter"><div className="project-card-content"><div className="project-number" aria-hidden="true" /><div className="project-main"><div className="project-topline"><span className="project-repo">NO RESULTS</span></div><h3>Nothing here yet</h3><p className="project-subtitle">No projects match this filter right now. Check back soon.</p></div><div className="project-controls"><button className="details-button" onPointerDown={(event) => { if (event.pointerType === 'mouse') { pressRef.current = true; resetFilter(); } }} onClick={() => { if (pressRef.current) pressRef.current = false; else resetFilter(); }}>Show all projects <ArrowUpRight /></button></div></div></article>;
 }
 
 // Timeline reads oldest → newest, left to right. Sorted here by the explicit
@@ -1403,10 +1477,10 @@ function ProjectCard({ project, expanded, toggleProject, inspectProject }: { pro
 const timelineOrdered = [...timeline].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
 
 function TimelineSection({ scrollToSection, sectionRef, viewportRef, trackRef }: { scrollToSection: (id: string, label: string) => void; sectionRef: RefObject<HTMLElement | null>; viewportRef: RefObject<HTMLDivElement | null>; trackRef: RefObject<HTMLDivElement | null> }) {
-  return <section ref={sectionRef} className="paper-section timeline-section" id="experience" aria-labelledby="experience-title"><div className="container"><div className="section-heading-row"><h2 id="experience-title">Timeline</h2><div className="heading-side"><SectionLabel>Experience</SectionLabel><p className="section-subheading timeline-hint">Scroll horizontally <span aria-hidden="true">→</span></p></div></div><div className="timeline-badges"><span>Education</span><span>Freelance</span></div><div className="timeline-viewport" ref={viewportRef} dir="ltr"><div className="timeline-track" ref={trackRef}><div className="timeline-progress" aria-hidden="true" /><div className="timeline-start" aria-hidden="true" />{timelineOrdered.map((entry, index) => <article className="timeline-entry" data-state={index === 0 ? 'current' : 'upcoming'} key={`${entry.date}-${entry.title}`}><div className="timeline-year">{entry.year}</div><div className="timeline-entry-body"><span className={`timeline-badge badge-${entry.badge.toLowerCase()}`}>{entry.badge}</span><h3>{entry.title}</h3><p className="timeline-role">{entry.role} <span>·</span> {entry.organization}</p><p>{entry.description}</p></div></article>)}<div className="timeline-end" aria-hidden="true"><span className="timeline-end-square" /><span className="timeline-end-label">NOW</span></div></div></div><div className="timeline-footer"><button className="timeline-cta" onClick={() => scrollToSection('contact', 'Contact')}>Start a conversation <ArrowUpRight /></button><span className="timeline-counter" data-timeline-counter aria-hidden="true">01 / {String(timelineOrdered.length).padStart(2, '0')}</span></div></div></section>;
+  return <section ref={sectionRef} className="paper-section timeline-section" data-theme="light" id="experience" aria-labelledby="experience-title"><div className="container"><div className="section-heading-row"><h2 id="experience-title">Timeline</h2><div className="heading-side"><SectionLabel>Experience</SectionLabel><p className="section-subheading timeline-hint">Scroll horizontally <span aria-hidden="true">→</span></p></div></div><div className="timeline-badges"><span>Education</span><span>Freelance</span></div><div className="timeline-viewport" ref={viewportRef} dir="ltr"><div className="timeline-track" ref={trackRef}><div className="timeline-progress" aria-hidden="true" /><div className="timeline-start" aria-hidden="true" />{timelineOrdered.map((entry, index) => <article className="timeline-entry" data-state={index === 0 ? 'current' : 'upcoming'} key={`${entry.date}-${entry.title}`}><div className="timeline-year">{entry.year}</div><div className="timeline-entry-body"><span className={`timeline-badge badge-${entry.badge.toLowerCase()}`}>{entry.badge}</span><h3>{entry.title}</h3><p className="timeline-role">{entry.role} <span>·</span> {entry.organization}</p><p>{entry.description}</p></div></article>)}<div className="timeline-end" aria-hidden="true"><span className="timeline-end-square" /><span className="timeline-end-label">NOW</span></div></div></div><div className="timeline-footer"><button className="timeline-cta" onClick={() => scrollToSection('contact', 'Contact')}>Start a conversation <ArrowUpRight /></button><span className="timeline-counter" data-timeline-counter aria-hidden="true">01 / {String(timelineOrdered.length).padStart(2, '0')}</span></div></div></section>;
 }
 
-function CertificationsSection() {
+function CertificationsSection({ theme }: { theme: Theme }) {
   const [activeCert, setActiveCert] = useState<{ issuer: string; label: string; image: string; issued?: string } | null>(null);
 
   useEffect(() => {
@@ -1418,7 +1492,7 @@ function CertificationsSection() {
     return () => { window.removeEventListener('keydown', onKey); document.body.style.overflow = prevOverflow; };
   }, [activeCert]);
 
-  return <><section className="ink-section certifications-section" id="certifications" aria-labelledby="certifications-title"><div className="container"><div className="section-heading-row"><h2 id="certifications-title">Industry<br /><em>credentials</em></h2><div className="heading-side"><SectionLabel>Certifications</SectionLabel><p className="section-subheading">Signals of curiosity,<br />not just completion.</p></div></div><div className="certification-grid">{certifications.map((certification, index) => <article className="certification-card section-scroll-reveal" key={certification.issuer}><div className="certification-index">0{index + 1} / CREDENTIAL</div><h3>{certification.issuer}</h3><ul>{certification.items.map((item) => <li key={item.label}><button type="button" className="cert-item-button" onClick={() => setActiveCert({ issuer: certification.issuer, label: item.label, image: item.image, issued: item.issued })} aria-haspopup="dialog"><span aria-hidden="true">↳</span>{item.label}</button></li>)}</ul><div className="certification-seal" aria-hidden="true">VERIFIED<br />FIELD<br />SIGNAL</div></article>)}</div></div></section>
+  return <><section className="ink-section certifications-section" data-theme={theme === 'dark' ? 'dark' : 'light'} id="certifications" aria-labelledby="certifications-title"><div className="container"><div className="section-heading-row"><h2 id="certifications-title">Industry<br /><em>credentials</em></h2></div><div className="certification-grid">{certifications.map((certification) => <article className="certification-card" key={certification.issuer}><h3>{certification.issuer}</h3><ul>{certification.items.map((item) => <li key={item.label}><button type="button" className="cert-item-button" onClick={() => setActiveCert({ issuer: certification.issuer, label: item.label, image: item.image, issued: item.issued })} aria-haspopup="dialog"><span aria-hidden="true">↳</span>{item.label}</button></li>)}</ul><div className="certification-seal" aria-hidden="true">VERIFIED<br />FIELD<br />SIGNAL</div></article>)}</div></div></section>
   {activeCert && <CertModal cert={activeCert} close={() => setActiveCert(null)} />}</>;
 }
 
@@ -1431,7 +1505,7 @@ function CertModal({ cert, close }: { cert: { issuer: string; label: string; ima
     closeButtonRef.current?.focus();
   }, []);
 
-  return <div className="inspection-backdrop cert-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) close(); }} onWheel={(event) => event.stopPropagation()}><section className="inspection-dialog cert-dialog" role="dialog" aria-modal="true" aria-labelledby={titleId}><div className="inspection-chrome"><span className="palette-lights" aria-hidden="true"><i /><i /><i /></span><span>CREDENTIAL / {cert.issuer}</span><button ref={closeButtonRef} className="inspection-close" onClick={close} aria-label="Close certificate dialog">×</button></div><div className="inspection-content cert-content"><h2 id={titleId}>{cert.label}</h2>{cert.issued && <div className="inspection-meta"><span>Issued</span><p>{cert.issued}</p></div>}{failed ? <p className="cert-placeholder">Certificate preview unavailable.</p> : <img className="cert-image" src={cert.image} alt={`${cert.label} certificate`} onError={() => setFailed(true)} />}<button className="inspection-action" onClick={close}>Close credential <span aria-hidden="true">↗</span></button></div></section></div>;
+  return <div className="inspection-backdrop cert-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) close(); }} onWheel={(event) => event.stopPropagation()}><section className="inspection-dialog cert-dialog" role="dialog" aria-modal="true" aria-labelledby={titleId}><div className="inspection-chrome"><span className="palette-lights" aria-hidden="true"><i /><i /><i /></span><span>CREDENTIAL / {cert.issuer}</span><button ref={closeButtonRef} className="inspection-close" onClick={close} aria-label="Close certificate dialog">×</button></div><div className="inspection-content cert-content"><h2 id={titleId}>{cert.label}</h2>{cert.issued && <div className="inspection-meta"><span>Issued</span><p>{cert.issued}</p></div>}{failed ? <p className="cert-placeholder">Certificate preview unavailable.</p> : <img className="cert-image no-copy-img" src={cert.image} alt={`${cert.label} certificate`} draggable={false} onError={() => setFailed(true)} />}<button className="inspection-action" onClick={close}>Close credential <span aria-hidden="true">↗</span></button></div></section></div>;
 }
 
 function InspectionModal({ project, close }: { project: Project; close: () => void }) {
@@ -1439,10 +1513,22 @@ function InspectionModal({ project, close }: { project: Project; close: () => vo
   const closeButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
-    closeButtonRef.current?.focus();
+    // preventScroll: focusing must never move the page under a pinned deck.
+    closeButtonRef.current?.focus({ preventScroll: true });
+    // Layout-neutral lock: html already reserves the scrollbar gutter
+    // (scrollbar-gutter: stable), so hiding overflow shifts neither content
+    // nor scroll position. Cleanup is the single restore funnel for every
+    // close path, including unmount. No refresh() here: remeasuring while
+    // locked would bake wrong pin geometry; one update() re-syncs state.
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      ScrollTrigger.update();
+    };
   }, []);
 
-  return <div className="inspection-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) close(); }} onWheel={(event) => event.stopPropagation()}><section className="inspection-dialog" role="dialog" aria-modal="true" aria-labelledby={titleId}><div className="inspection-chrome"><span className="palette-lights" aria-hidden="true"><i /><i /><i /></span><span>CASE FILE / {project.number}</span><button ref={closeButtonRef} className="inspection-close" onClick={close} aria-label="Close inspection dialog">×</button></div><div className="inspection-content"><StatusBadge status={project.status} /><h2 id={titleId}>{project.title}</h2><p className="inspection-subtitle">{project.subtitle}</p><div className="inspection-meta"><span>Impact</span><p>{project.impact}</p></div><div className="inspection-meta"><span>Stack</span><p>{project.stack.join(' / ')}</p></div><ul className="inspection-details">{project.details.map((detail) => <li key={detail}>{detail}</li>)}</ul><button className="inspection-action" onClick={close}>Close case file <span aria-hidden="true">↗</span></button></div></section></div>;
+  return <div className="inspection-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) close(); }} onWheel={(event) => event.stopPropagation()}><section className="inspection-dialog" role="dialog" aria-modal="true" aria-labelledby={titleId}><div className="inspection-chrome"><span className="palette-lights" aria-hidden="true"><i /><i /><i /></span><span>CASE FILE / {project.number}</span><button ref={closeButtonRef} className="inspection-close" onClick={close} aria-label="Close inspection dialog">×</button></div><div className="inspection-content"><StatusBadge status={project.status} /><h2 id={titleId}>{project.title}</h2>{project.subtitle && <p className="inspection-subtitle">{project.subtitle}</p>}{project.impact && <div className="inspection-meta"><span>Impact</span><p>{project.impact}</p></div>}{project.stack.length > 0 && <div className="inspection-meta"><span>Stack</span><p>{project.stack.join(' / ')}</p></div>}{project.details.length > 0 && <ul className="inspection-details">{project.details.map((detail) => <li key={detail}>{detail}</li>)}</ul>}<button className="inspection-action" onClick={close}>Close case file <span aria-hidden="true">↗</span></button></div></section></div>;
 }
 
 function CommandPalette({ inputRef, query, setQuery, selectedCommand, setSelectedCommand, commands, onKeyDown, close }: { inputRef: React.RefObject<HTMLInputElement | null>; query: string; setQuery: (value: string) => void; selectedCommand: number; setSelectedCommand: (value: number) => void; commands: PaletteCommand[]; onKeyDown: (event: ReactKeyboardEvent<HTMLInputElement>) => void; close: () => void }) {

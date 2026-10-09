@@ -104,7 +104,7 @@ export function SystemFaultScreen({ error, onRetry }: { error: Error; onRetry: (
             <div className="error-console-body">
               <p className="error-kicker"><span className="error-tag">ERR 500</span> // SYSTEM FAULT</p>
               <h1 id="fault-title" className="error-title">Something broke on my end.</h1>
-              <p className="error-copy">The system hit a fault it couldn&apos;t recover from. Your data is safe — nothing here sends anything anywhere. Reload to reboot the interface, or report it and I&apos;ll inspect the logs.</p>
+              <p className="error-copy">The system hit a fault it couldn&apos;t recover from. Your data is safe. Nothing here sends anything anywhere. Reload to reboot the interface, or report it and I&apos;ll inspect the logs.</p>
               <ErrorDetails error={error} />
               <div className="error-actions">
                 <button className="button button-primary" onClick={() => window.location.reload()}>Reload</button>
@@ -191,7 +191,7 @@ export function NotFoundScreen({ path, onHome, onNavigate, onPalette }: { path: 
             </div>
             {suggestion && (
               <div className="error-actions">
-                <button className="button" onClick={() => onNavigate(suggestion.slug, suggestion.label)}>Go to /{suggestion.slug} — {suggestion.label}</button>
+                <button className="button" onClick={() => onNavigate(suggestion.slug, suggestion.label)}>Go to /{suggestion.slug}: {suggestion.label}</button>
               </div>
             )}
             <div className="error-actions">
