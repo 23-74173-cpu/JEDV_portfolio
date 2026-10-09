@@ -1,9 +1,9 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
-import type { KeyboardEvent as ReactKeyboardEvent, ReactNode, RefObject } from 'react';
+import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, ReactNode, RefObject } from 'react';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { ScrollToPlugin } from 'gsap/ScrollToPlugin';
-import { certifications, email, projects, skillGroups, timeline, type Project, type ProjectStatus } from './data';
+import { certifications, email, projects, skillGroups, timeline, type Project, type ProjectStatus, type SkillItem } from './data';
 import { ErrorBoundary, NotFoundScreen, parseRoute } from './errors';
 import type { RouteState } from './errors';
 import {
@@ -201,7 +201,7 @@ function SkillIcon({ name }: { name: string }) {
   if (n.includes('claude')) return wrap(<SiClaude />);
   if (n.includes('opencode')) return wrap(<SiOpencode />);
   if (n.includes('cursor')) return wrap(<SiCursor />);
-  // generic fallback — first letter in a tiny badge
+  // generic fallback - first letter in a tiny badge
   return wrap(<span style={{width:'100%',height:'100%',display:'grid',placeItems:'center',border:'1px solid currentColor',fontSize:'0.62em',fontWeight:800,lineHeight:1}}>{name.trim()[0]?.toUpperCase()}</span>);
 }
 
@@ -1454,8 +1454,13 @@ function StatusPanel() {
   return <div className="status-panel"><dl><div><dt>Education</dt><dd>4th-year BSIT, Business Analytics<br />Batangas State University, ARASOF Nasugbu</dd></div><div><dt>Location</dt><dd>Nasugbu, Batangas, Philippines</dd></div><div><dt>Workflow</dt><dd>Solo, end-to-end, AI-assisted</dd></div></dl></div>;
 }
 
-function SkillGroup({ label, items }: { label: string; items: string[] }) {
-  return <div className="skill-group"><h3>{label}</h3><div className="pill-list">{items.map((item) => <span className="skill-pill" key={item}><SkillIcon name={item} />{item}</span>)}</div></div>;
+function SkillGroup({ label, items }: { label: string; items: SkillItem[] }) {
+  return <div className="skill-group"><h3>{label}</h3><div className="pill-list">{items.map((item) => {
+    const style = item.brand
+      ? ({ '--brand': item.brand, ...(item.brandDark ? { '--brand-dark': item.brandDark } : {}) } as CSSProperties)
+      : undefined;
+    return <span className="skill-pill" key={item.name} style={style}><SkillIcon name={item.name} />{item.name}</span>;
+  })}</div></div>;
 }
 
 function ProjectCard({ project, inspectProject }: { project: Project; inspectProject: (project: Project) => void }) {

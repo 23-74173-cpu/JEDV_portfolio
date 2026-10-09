@@ -69,15 +69,101 @@ export const technologies = [
   'Figma',
 ];
 
-export const skillGroups = [
-  { label: 'Languages', items: ['Java', 'JavaScript', 'TypeScript', 'C#', 'C++', 'Python', 'SQL', 'PHP'] },
-  { label: 'Frontend', items: ['React', 'React Native (Expo)', 'Next.js', 'Java Swing', 'HTML', 'CSS', 'Tailwind CSS'] },
-  { label: 'Backend', items: ['Node.js', 'Laravel', 'CodeIgniter', 'JWT Auth', 'bcryptjs'] },
-  { label: 'Database', items: ['MySQL', 'MariaDB', 'SQLite', 'AES-256-GCM Encryption'] },
-  { label: 'Infrastructure & Tools', items: ['Docker', 'Git / GitHub', 'Railway', 'Hostinger', 'Vercel', 'XAMPP / LAMPP', 'Linux', 'Windows', 'Basic Networking'] },
-  { label: 'Analytics', items: ['Power BI', 'Tableau', 'Data Modeling', 'Forecasting', 'SARIMA', 'XGBoost'] },
-  { label: 'AI-Assisted Development', items: ['Claude Code', 'OpenCode', 'Cursor'] },
-  { label: 'Design Tools', items: ['Figma'] },
+export type SkillItem = {
+  name: string;
+  /** Official single primary brand color as hex for the light paper section. */
+  brand?: string;
+  /** Variant for a dark section background. Used only under a dark theme. */
+  brandDark?: string;
+};
+
+export type SkillGroup = {
+  label: string;
+  items: SkillItem[];
+};
+
+export const skillGroups: SkillGroup[] = [
+  {
+    label: 'Languages',
+    items: [
+      { name: 'Java', brand: '#C76E00', brandDark: '#ED8B00' },
+      { name: 'JavaScript', brand: '#8A6D00', brandDark: '#F7DF1E' },
+      { name: 'TypeScript', brand: '#3178C6' },
+      { name: 'C#', brand: '#512BD4', brandDark: '#7C5CFF' },
+      { name: 'C++', brand: '#00599C', brandDark: '#4D9CD6' },
+      { name: 'Python', brand: '#3776AB' },
+      { name: 'SQL' },
+      { name: 'PHP', brand: '#777BB4' },
+    ],
+  },
+  {
+    label: 'Frontend',
+    items: [
+      { name: 'React', brand: '#0E7C9E', brandDark: '#61DAFB' },
+      { name: 'React Native (Expo)', brand: '#000000', brandDark: '#FFFFFF' },
+      { name: 'Next.js', brand: '#000000', brandDark: '#FFFFFF' },
+      { name: 'Java Swing' },
+      { name: 'HTML', brand: '#E34F26' },
+      { name: 'CSS', brand: '#1572B6' },
+      { name: 'Tailwind CSS', brand: '#0E7490', brandDark: '#06B6D4' },
+    ],
+  },
+  {
+    label: 'Backend',
+    items: [
+      { name: 'Node.js', brand: '#339933' },
+      { name: 'Laravel', brand: '#FF2D20' },
+      { name: 'CodeIgniter', brand: '#EF4223' },
+      { name: 'JWT Auth' },
+      { name: 'bcryptjs' },
+    ],
+  },
+  {
+    label: 'Database',
+    items: [
+      { name: 'MySQL', brand: '#4479A1' },
+      { name: 'MariaDB', brand: '#003545', brandDark: '#7AC3D8' },
+      { name: 'SQLite', brand: '#0F80CC' },
+      { name: 'AES-256-GCM Encryption' },
+    ],
+  },
+  {
+    label: 'Infrastructure & Tools',
+    items: [
+      { name: 'Docker', brand: '#1D7CC2', brandDark: '#2496ED' },
+      { name: 'Git / GitHub', brand: '#F05032' },
+      { name: 'Railway', brand: '#0B0D0F', brandDark: '#FFFFFF' },
+      { name: 'Hostinger', brand: '#673DE6' },
+      { name: 'Vercel', brand: '#000000', brandDark: '#FFFFFF' },
+      { name: 'XAMPP / LAMPP' },
+      { name: 'Linux', brand: '#000000', brandDark: '#FFFFFF' },
+      { name: 'Windows', brand: '#0078D4', brandDark: '#00A4EF' },
+      { name: 'Basic Networking' },
+    ],
+  },
+  {
+    label: 'Analytics',
+    items: [
+      { name: 'Power BI', brand: '#7A6200', brandDark: '#F2C811' },
+      { name: 'Tableau', brand: '#B85A1B', brandDark: '#E97627' },
+      { name: 'Data Modeling' },
+      { name: 'Forecasting' },
+      { name: 'SARIMA' },
+      { name: 'XGBoost' },
+    ],
+  },
+  {
+    label: 'AI-Assisted Development',
+    items: [
+      { name: 'Claude Code', brand: '#A85638', brandDark: '#D97757' },
+      { name: 'OpenCode', brand: '#000000', brandDark: '#FFFFFF' },
+      { name: 'Cursor', brand: '#000000', brandDark: '#FFFFFF' },
+    ],
+  },
+  {
+    label: 'Design Tools',
+    items: [{ name: 'Figma', brand: '#F24E1E' }],
+  },
 ];
 
 export const projects: Project[] = [

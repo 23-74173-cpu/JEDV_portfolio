@@ -22,7 +22,7 @@ export const resumeText = [
     '',
   ]),
   'SKILLS',
-  ...skillGroups.map((group) => `${group.label}: ${group.items.join(', ')}`),
+  ...skillGroups.map((group) => `${group.label}: ${group.items.map((item) => item.name).join(', ')}`),
   '',
   'CERTIFICATIONS',
   'Microsoft IT Specialist: Data Analytics; Databases; Device Configuration & Management (Windows 10)',

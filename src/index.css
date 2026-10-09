@@ -413,10 +413,20 @@ h1 em, h2 em { font-style: normal; }
 }
 .skill-pill:last-child { border-bottom: 0; }
 .skill-pill:hover { border-color: var(--ink-line-strong); color: var(--ink-text); background: var(--paper-2); }
-.skill-pill:hover .skill-icon { color: var(--ink-text); }
-.skill-icon { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; flex: 0 0 auto; color: var(--ink-muted); }
+.skill-icon { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; flex: 0 0 auto; color: var(--ink-muted); transition: color 150ms ease; }
 .skill-icon svg { width: 100%; height: 100%; }
-.concept-mark { display: inline-block; flex: 0 0 auto; width: 9px; height: 9px; border: 1.5px solid currentColor; opacity: 0.75; }
+/* Brand hover: row is the target, only the icon takes the brand color, the
+   label stays ink. Hover is pointer-only so touch is unaffected;
+   focus-visible stays outside the media query for keyboard users. */
+@media (hover: hover) {
+  .skill-pill:hover .skill-icon { color: var(--brand, var(--ink-muted)); }
+  .stack-section[data-theme="dark"] .skill-pill:hover .skill-icon { color: var(--brand-dark, var(--brand, var(--ink-muted))); }
+}
+.skill-pill:focus-visible .skill-icon { color: var(--brand, var(--ink-muted)); }
+.stack-section[data-theme="dark"] .skill-pill:focus-visible .skill-icon { color: var(--brand-dark, var(--brand, var(--ink-muted))); }
+@media (prefers-reduced-motion: reduce) {
+  .skill-icon { transition: none; }
+}
 .figma-icon { width: 14px; height: 14px; flex: 0 0 auto; }
 
 /* ============ GitHub ============ */
