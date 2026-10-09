@@ -370,6 +370,10 @@ function App() {
   };
 
   const applyTheme = (next: ThemeMode, anchor?: HTMLElement | 'center' | null) => {
+    if (next === themeMode) {
+      notify(`Already in ${next}`);
+      return;
+    }
     const run = () => {
       selectThemeMode(next);
       notify(`Theme: ${next}`);
