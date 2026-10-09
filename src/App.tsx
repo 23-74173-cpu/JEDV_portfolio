@@ -1539,7 +1539,7 @@ function GitHubActivity() {
   const [chartFailed, setChartFailed] = useState(false);
   // Contribution cells embedded at build time (see scripts/prerender.mjs):
   // [column, row, level 0-4, date, count]. Null on SSR or when the build
-  // fetch failed, in which case the upstream image is used instead.
+  // fetch failed, in which case the live fetch or upstream image is used.
   const chartData = useMemo(() => {
     if (typeof document === 'undefined') return null;
     try {
@@ -1554,18 +1554,66 @@ function GitHubActivity() {
       return null;
     }
   }, []);
+  // Live data keeps the grid fresh daily and works where the build embed
+  // is absent (notably `vite dev`, whose index.html has no gh-data tag).
+  // Levels come straight from GitHub's own 0-4 scale.
+  const [liveData, setLiveData] = useState<typeof chartData>(null);
+  useEffect(() => {
+    let cancelled = false;
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), 10000);
+    fetch('https://github-contributions-api.jogruber.de/v4/23-74173-cpu?y=last', { signal: controller.signal })
+      .then((response) => {
+        if (!response.ok) throw new Error(`contributions HTTP ${response.status}`);
+        return response.json() as Promise<{
+          total: { lastYear: number };
+          contributions: Array<{ date: string; count: number; level: number }>;
+        }>;
+      })
+      .then((payload) => {
+        if (cancelled || !Array.isArray(payload.contributions) || payload.contributions.length === 0) return;
+        const day = 86400000;
+        const first = Date.parse(`${payload.contributions[0].date}T00:00:00Z`);
+        const firstSunday = first - new Date(first).getUTCDay() * day;
+        const cells = payload.contributions.map((entry) => {
+          const time = Date.parse(`${entry.date}T00:00:00Z`);
+          const col = Math.round((time - firstSunday) / day / 7);
+          const row = new Date(time).getUTCDay();
+          const level = Math.min(4, Math.max(0, Math.round(entry.level)));
+          const count = Number.isFinite(entry.count) ? entry.count : 0;
+          return [col, row, level, entry.date, count] as [number, number, number, string, number];
+        });
+        const dates = payload.contributions.map((entry) => entry.date).sort();
+        setLiveData({
+          total: payload.total?.lastYear ?? cells.reduce((sum, cell) => sum + cell[4], 0),
+          start: dates[0],
+          end: dates[dates.length - 1],
+          cells,
+        });
+      })
+      .catch(() => {
+        // Fall through to embedded data or the upstream image.
+      })
+      .finally(() => window.clearTimeout(timer));
+    return () => {
+      cancelled = true;
+      controller.abort();
+      window.clearTimeout(timer);
+    };
+  }, []);
+  const effectiveData = liveData ?? chartData;
   // GitHub pitch: 10px squares, 3px gaps, square corners. Month labels sit
   // in the top strip, weekday labels in the left gutter.
   const chartLayout = useMemo(() => {
-    if (!chartData) return null;
+    if (!effectiveData) return null;
     const step = 13;
     const size = 10;
     const x0 = 32;
     const y0 = 24;
     const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    const maxCol = chartData.cells.reduce((max, cell) => Math.max(max, cell[0]), 0);
+    const maxCol = effectiveData.cells.reduce((max, cell) => Math.max(max, cell[0]), 0);
     const colMonth = new Map<number, number>();
-    chartData.cells.forEach(([col, , , date]) => {
+    effectiveData.cells.forEach(([col, , , date]) => {
       if (!colMonth.has(col)) colMonth.set(col, Number(date.slice(5, 7)) - 1);
     });
     const months: Array<{ col: number; text: string }> = [];
@@ -1591,7 +1639,7 @@ function GitHubActivity() {
         { row: 5, text: 'Fri' },
       ],
     };
-  }, [chartData]);
+  }, [effectiveData]);
   const formatCellDate = (date: string) => {
     const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     const parts = date.split('-');
@@ -1619,8 +1667,8 @@ function GitHubActivity() {
                   <span>Contribution chart unavailable offline.</span>
                   <a href="https://github.com/23-74173-cpu" target="_blank" rel="noreferrer">View profile ↗</a>
                 </div>
-              ) : chartData && chartLayout ? (
-                <a href="https://github.com/23-74173-cpu" target="_blank" rel="noreferrer" aria-label={`View GitHub profile, ${chartData.total} contributions from ${chartData.start} to ${chartData.end}`}>
+              ) : effectiveData && chartLayout ? (
+                <a href="https://github.com/23-74173-cpu" target="_blank" rel="noreferrer" aria-label={`View GitHub profile, ${effectiveData.total} contributions from ${effectiveData.start} to ${effectiveData.end}`}>
                   {/* Width and height attrs reserve the exact ratio before
                       paint, so pin starts below this section never shift. */}
                   <svg
@@ -1629,7 +1677,7 @@ function GitHubActivity() {
                     width={chartLayout.width}
                     height={chartLayout.height}
                     role="img"
-                    aria-label={`${chartData.total} contributions from ${chartData.start} to ${chartData.end}`}
+                    aria-label={`${effectiveData.total} contributions from ${effectiveData.start} to ${effectiveData.end}`}
                   >
                     {chartLayout.months.map((month) => (
                       <text
@@ -1653,7 +1701,7 @@ function GitHubActivity() {
                         {day.text}
                       </text>
                     ))}
-                    {chartData.cells.map(([col, row, level, date, count]) => (
+                    {effectiveData.cells.map(([col, row, level, date, count]) => (
                       <rect
                         key={date}
                         className="gh-cell"
@@ -1690,7 +1738,7 @@ function GitHubActivity() {
                 </a>
               )}
             </div>
-            {chartData && chartLayout && !chartFailed && (
+            {effectiveData && chartLayout && !chartFailed && (
               <div className="github-legend" aria-hidden="true">
                 <span>Less</span>
                 {[0, 1, 2, 3, 4].map((level) => (

@@ -424,7 +424,7 @@ h1 em, h2 em { font-style: normal; }
 
 /* ============ Marquee strip ============ */
 /* ============ About ============ */
-.about-section { padding: var(--section-pad) 0; background: var(--surface); border-bottom: 1px solid var(--hairline); }
+.about-section { padding: var(--section-pad) 0; background: var(--bg); border-bottom: 1px solid var(--hairline); }
 .section-heading-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 28px; margin-bottom: clamp(36px, 5vw, 60px); }
 .section-heading-row h2 { margin-bottom: 0; font-size: var(--text-h2); line-height: 0.9; }
 .heading-side { display: flex; flex-direction: column; align-items: flex-end; gap: 10px; text-align: right; flex-shrink: 0; max-width: 280px; }
@@ -478,7 +478,7 @@ h1 em, h2 em { font-style: normal; }
 .figma-icon { width: 14px; height: 14px; flex: 0 0 auto; }
 
 /* ============ GitHub ============ */
-.github-section { padding: var(--section-pad) 0; background: var(--surface); color: var(--text); border-bottom: 1px solid var(--hairline); }
+.github-section { padding: var(--section-pad) 0; background: var(--bg); color: var(--text); border-bottom: 1px solid var(--hairline); }
 .github-section .section-label { color: var(--text-muted); }
 .github-section .section-subheading { color: var(--text-muted); }
 .github-section h2 { color: var(--text); }
@@ -609,7 +609,7 @@ h1 em, h2 em { font-style: normal; }
 .status-in-progress { border-style: dashed; }
 
 /* ============ Timeline ============ */
-.timeline-section { padding: var(--section-pad) 0; background: var(--surface); color: var(--text); border-bottom: 1px solid var(--hairline); }
+.timeline-section { padding: var(--section-pad) 0; background: var(--bg); color: var(--text); border-bottom: 1px solid var(--hairline); }
 .timeline-section .section-heading-row { margin-bottom: 20px; }
 .timeline-hint { text-align: right; }
 .timeline-badges { display: flex; gap: 8px; margin-bottom: 44px; }
@@ -650,7 +650,7 @@ h1 em, h2 em { font-style: normal; }
    Upcoming: hollow, 1px strong border, surface fill.
    Reached: solid text fill. Current: solid, slightly larger (12px),
    plus a 1px outer outline offset 3px. */
-.timeline-entry::after { position: absolute; content: ""; top: 0.5px; left: 0; width: 10px; height: 10px; background: var(--surface); border: 1px solid var(--border-strong); transform: translate(-50%, -50%); }
+.timeline-entry::after { position: absolute; content: ""; top: 0.5px; left: 0; width: 10px; height: 10px; background: var(--bg); border: 1px solid var(--border-strong); transform: translate(-50%, -50%); }
 /* STEP 4: 12px stem from marker down toward the year label — explicit link. */
 .timeline-entry::before { position: absolute; content: ""; top: 6px; left: 0; width: 1px; height: 12px; background: var(--border-strong); transform: translateX(-50%); }
 /* Marker states driven from scroll progress via data-state (not hover). */
@@ -711,7 +711,7 @@ body.timeline-pin-active .section-rail { display: none; }
 }
 
 /* ============ Contact ============ */
-.contact-section { color: var(--text); background: var(--surface); padding: var(--section-pad) 0; min-height: 70svh; }
+.contact-section { color: var(--text); background: var(--bg); padding: var(--section-pad) 0; min-height: 70svh; }
 .contact-layout { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(48px, 8vw, 140px); }
 .contact-section h2 { margin-bottom: 0; font-size: var(--text-h2); line-height: 0.9; }
 .contact-copy { padding-top: 40px; }
